@@ -70,6 +70,12 @@ export type Me = Person & {
   display_name: string | null; minecraft_linked: boolean; jace_linked: boolean; inbox: string;
   realtime: { url: string; key: string }; settings: Settings; onboarded: boolean;
   handle_change_at?: string | null;      // when the handle can change again (null: now)
+  jace_messages?: JaceMessages | null;   // Jace-linked people: syncing with their Jace messages
+};
+/** GET /jace/messages: syncing direct messages and group chats with Jace's (server/lib/jaceSync.ts). */
+export type JaceMessages = {
+  available: boolean; state: "none" | "ok" | "disconnected" | "banned"; sync_enabled: boolean;
+  imported: boolean; last_sync_at: string | null; last_error: string | null; granted_at: string | null;
 };
 export type Role = {
   id: string; server_id: string; name: string; color: string | null; icon: string | null; position: number;

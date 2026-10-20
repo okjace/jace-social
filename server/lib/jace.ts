@@ -2,7 +2,8 @@
 // The client secret stays on this server: browsers and apps only ever see our own session tokens.
 import { ApiError, siteUrl } from "./server";
 
-const JACE = "https://jaceo.vercel.app";
+/** Jace itself. JACE_URL points it elsewhere for testing (scripts/mock-jace.mjs); never in production. */
+export const JACE = (process.env.JACE_URL || "https://jaceo.vercel.app").replace(/\/+$/, "");
 
 export const jaceConfigured = () => !!(process.env.JACE_OAUTH_CLIENT_ID && process.env.JACE_OAUTH_CLIENT_SECRET);
 
@@ -13,13 +14,19 @@ export function jaceAuthorizeUrl(state: string) {
   if (!jaceConfigured()) throw new ApiError(503, "Sign in with Jace isn't set up on this server yet");
   return `${JACE}/oauth/authorize?` + new URLSearchParams({
     response_type: "code", client_id: process.env.JACE_OAUTH_CLIENT_ID!, redirect_uri: jaceCallbackUrl(),
-    scope: "profile", state,
+    // messages: Jace Social is an official Jace app, so this asks nothing extra (no consent
+    // screen) and lets it sync people's Jace messages (lib/jaceSync.ts)
+    scope: "profile messages", state,
   });
 }
 
-export type JaceUser = { sub: string; username: string; picture: string | null };
+export type JaceUser = {
+  sub: string; username: string; picture: string | null; banned: boolean; muted: boolean;
+  /** the access token (365 days, no refresh): kept encrypted for syncing messages */
+  token: string; scope: string;
+};
 
-/** Trade the code from the redirect for the Jace account it belongs to. */
+/** Trade the code from the redirect for the Jace account it belongs to (and its access token). */
 export async function jaceUserFromCode(code: string): Promise<JaceUser> {
   const r = await fetch(`${JACE}/api/oauth/token`, {
     method: "POST",
@@ -39,5 +46,6 @@ export async function jaceUserFromCode(code: string): Promise<JaceUser> {
   const username = String(d.preferred_username ?? d.username ?? d.name ?? "").slice(0, 32);
   if (!sub) throw new ApiError(502, "Jace didn't say who you are");
   const picture = typeof (d.picture ?? d.avatar_url ?? d.image) === "string" ? String(d.picture ?? d.avatar_url ?? d.image) : null;
-  return { sub, username: username || "Jace user", picture };
+  return { sub, username: username || "Jace user", picture, banned: d.banned === true, muted: d.muted === true,
+           token: String(t.access_token), scope: String(t.scope ?? "") };
 }

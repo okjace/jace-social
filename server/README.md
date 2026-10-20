@@ -15,7 +15,7 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 
 1. **Supabase:** create a free project at <https://supabase.com>.
    - **Security options when creating the project:** Data API **on**, "Automatically expose new tables" **off**, automatic RLS **on**.
-   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql` and `supabase/006_handles.sql` (everyone's @handle). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
+   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle) and `supabase/007_jace_messages.sql` (syncing messages with Jace). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
    - **Realtime → Settings:** make sure public channel access is allowed (it's the default).
    - **Project Settings → API Keys:** copy the project URL, the **publishable** key and the **secret** key.
 2. **Vercel:** New Project, then import `okjace/jace-social`.
@@ -25,7 +25,36 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
    - **Sign in with Jace:** register an app at Jace with this redirect URI:
      `https://jace-social.vercel.app/api/v1/auth/jace/callback`
      Then add `JACE_OAUTH_CLIENT_ID` and `JACE_OAUTH_CLIENT_SECRET`.
+   - **Syncing messages with Jace** (see below): `JACE_TOKEN_KEY` (encrypts people's Jace tokens:
+     `openssl rand -base64 32`) and `CRON_SECRET` (any long random text; also add it as the
+     `CRON_SECRET` secret on GitHub, which runs the sync every 5 minutes).
    - Deploy.
+
+## Jace messages
+
+Direct messages and group chats sync both ways with people's Jace messages (jaceo.vercel.app's
+messages API; Jace's own site no longer shows them, so Jace Social is where they're read). See
+`lib/jaceSync.ts`. In short:
+
+- **Connect:** "Sign in with Jace" asks for `profile messages`. The access token is kept encrypted
+  with `JACE_TOKEN_KEY` (AES-256-GCM) in `jace_connections`, never sent to clients. People who
+  signed in before get a one-time "Connect your Jace messages" prompt (it signs in with Jace again).
+- **Import:** the first sync copies every Jace conversation once, with original times. Jace people
+  who never used Jace Social get a placeholder profile, which becomes theirs when they sign in with
+  Jace; people who talk on Jace become friends here so their chat shows up.
+- **Pull:** every 5 minutes (`.github/workflows/jace-sync.yml` calls `/api/v1/jace/cron`), and right
+  after someone opens a chat. Only conversations with something new are fetched (`?since=`).
+- **Push:** messages sent here between two Jace people, or in a group chat that came from Jace, also
+  go to Jace (text only, `external_id` `js-dm-<id>` / `js-ch-<id>`), after the sender gets their
+  answer, through the `jace_outbox` queue with retries.
+- **No duplicates:** `jace_message_links` maps Jace message ids to local ones; our own pushes are
+  linked under the id Jace gives them, so they never come back.
+- **Moderation:** a banned Jace account stops syncing; a muted one keeps its messages here only.
+- **Off switch:** Settings → Accounts → Jace messages: "Sync messages with Jace", "Sync now",
+  "Disconnect Jace messages" (deletes the token). Minecraft-only people are never involved.
+- **Testing:** `scripts/mock-jace.mjs` is a local Jace with two users who already talk; point the
+  server at it with `JACE_URL` (never in production). `scripts/test-jace-core.mjs` tests the parts
+  without a database; `scripts/test-jace-sync.mjs` runs the whole sync against a test Supabase project.
 
 ## API (`/api/v1`, `Authorization: Bearer <token>`)
 
@@ -37,7 +66,9 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 | POST | `auth/minecraft/poll` `{ticket}` | `{pending}` until the code is entered, then like `auth/finish` |
 | POST | `link/minecraft/device`, `link/minecraft/device/poll` `{ticket}` | the same, to link Minecraft to a signed-in Jace account |
 | POST | `auth/signout` | |
-| GET | `me` | |
+| GET | `me` | (Jace-linked people: also `jace_messages`, see `jace/messages`) |
+| GET, PATCH `{sync}`, DELETE | `jace/messages` | syncing with Jace messages: its state, the switch, disconnect |
+| POST | `jace/messages/sync` | "Sync now" |
 | GET | `friends` | friends with status and unread counts, plus incoming and outgoing requests |
 | POST | `friends` `{name}` | send a request (works even if they haven't signed up yet) |
 | DELETE | `friends?uuid=` | remove a friend or cancel/decline a request |

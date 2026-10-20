@@ -2,6 +2,8 @@
 //   and the messages replied to
 // POST {to, body, reply_to?, attachments?}: send a message to a friend
 import { ApiError, areFriends, body, cleanUuid, db, handler, me, notify } from "@/lib/server";
+import { olderThan } from "@/lib/chat";
+import { pullSoon, pushDmLater } from "@/lib/jaceSync";
 import { previewLater } from "@/lib/embeds";
 import { reactionsFor, repliedTo } from "@/lib/reactions";
 import { cleanAttachments } from "@/lib/uploads";
@@ -14,11 +16,15 @@ export const GET = handler(async (req) => {
   const other = cleanUuid(params.get("with"));
   let q = db().from("messages").select(DM_COLUMNS)
     .or(`and(sender.eq.${p.uuid},recipient.eq.${other}),and(sender.eq.${other},recipient.eq.${p.uuid})`)
-    .order("id", { ascending: false }).limit(50);
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50);
   const before = Number(params.get("before"));
-  if (before) q = q.lt("id", before);
+  if (before) {
+    const older = await olderThan("messages", before);
+    q = older ? q.or(older) : q.lt("id", before);
+  }
   const { data, error } = await q;
   if (error) throw error;
+  pullSoon(p.uuid);                                  // anything new on Jace arrives right after (lib/jaceSync.ts)
   const msgs = (data ?? []).reverse();
   const [reactions, replies] = await Promise.all([
     reactionsFor("d", msgs.map((m) => m.id), p.uuid),
@@ -53,6 +59,7 @@ export const POST = handler(async (req) => {
   if (error) throw error;
   const { data: o } = await db().from("profiles").select("inbox").eq("uuid", to).single();
   if (o) await notify([o.inbox], "message", { from: p.uuid, name: p.name, id: data.id });
+  pushDmLater(p, to, data);                          // also to Jace, when both people use Jace (after answering)
   previewLater("messages", data.id, text, async () => {
     await notify([o?.inbox, p.inbox].filter(Boolean) as string[], "dm_update", { from: p.uuid, with: to, id: data.id, edited: true });
   });

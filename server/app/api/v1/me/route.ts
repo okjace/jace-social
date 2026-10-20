@@ -1,6 +1,7 @@
 // GET: your own profile (everything friends see, plus account details)
 // PATCH {display_name?, handle?, bio?, pronouns?, accent_color?, links?, status?, custom_status?, status_emoji?}
 //   handle: your unique @name (3-20: letters, numbers, _ and .), changeable once every 7 days
+import { connectionInfo } from "@/lib/jaceSync";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
   type Profile } from "@/lib/server";
 
@@ -42,7 +43,11 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   developer: (v) => Boolean(v),
 };
 
-export const GET = handler(async (req) => own(await me(req)));
+export const GET = handler(async (req) => {
+  const p = await me(req);
+  // Jace-linked people: whether their Jace messages are connected (for the "Connect" prompt)
+  return { ...own(p), jace_messages: p.jace_sub ? await connectionInfo(p.uuid) : null };
+});
 
 const STATUSES = ["online", "idle", "dnd", "invisible"];
 const text = (v: unknown, max: number, field: string) => {

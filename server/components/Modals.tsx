@@ -7,7 +7,7 @@ import { BotActivity, MyBots } from "./Bots";
 import { addAnotherAccount, forgetAccount, savedAccounts, switchAccount } from "@/lib/accounts";
 import { ACCENTS, applySettings, THEME_NAMES } from "@/lib/theme";
 import {
-  api, desktopReady, getToken, inDesktop, since, statusLabel, type Me, type Person, type Settings, type Status, type DesktopBridge, type ServerDetail,
+  api, desktopReady, getToken, inDesktop, since, statusLabel, type JaceMessages, type Me, type Person, type Settings, type Status, type DesktopBridge, type ServerDetail,
 } from "@/lib/client";
 import { ActivityCard, Avatar, Modal, PersonRow } from "./ui";
 import { Link } from "./Markdown";
@@ -238,6 +238,7 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
                 ? me.minecraft_linked && <button className="btn small" onClick={unlinkJace}>Unlink</button>
                 : <button className="btn primary small" onClick={linkJace}>Link Jace</button>}
             </div>
+            {me.jace_linked && <JaceMessagesCard me={me} onConnect={linkJace} onError={onError} />}
             <div className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ flex: 1 }}><b>Minecraft</b><div className="muted small">{me.minecraft_linked ? me.minecraft_name : "Not linked"}</div></div>
               {!me.minecraft_linked && !linking &&
@@ -347,6 +348,52 @@ function AdvancedTab(props: SettingsProps) {
     {s.developer && <div className="card small">Your id: <code className="inline-code">{props.me.uuid}</code>
       <button className="icon-btn small" onClick={() => navigator.clipboard?.writeText(props.me.uuid)}>⧉</button></div>}
   </>;
+}
+
+/** Settings -> Accounts: syncing your direct messages and group chats with your Jace messages. */
+export function JaceMessagesCard({ me, onConnect, onError }: { me: Me; onConnect: () => void; onError: Err }) {
+  const [info, setInfo] = useState<JaceMessages | null>(me.jace_messages ?? null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  useEffect(() => { api<JaceMessages>("/jace/messages").then(setInfo).catch(() => {}); }, [me.jace_messages?.state]);
+  if (!info || !info.available) return null;
+  const run = async (fn: () => Promise<JaceMessages & { imported?: number | boolean }>, done?: (r: JaceMessages & { imported?: number | boolean }) => string) => {
+    setBusy(true); setNote("");
+    try { const r = await fn(); setInfo(r); if (done) setNote(done(r)); } catch (e) { onError((e as Error).message); } finally { setBusy(false); }
+  };
+  const connected = info.state === "ok";
+  return (
+    <div className="card" style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ flex: 1 }}><b>Jace messages</b>
+          <div className="muted small">{
+            info.state === "banned" ? "Your Jace account is banned, so your messages don't sync with Jace."
+            : info.state === "none" ? "Bring your Jace conversations here, and keep them in sync."
+            : info.state === "disconnected" ? "Not connected - reconnect to keep your messages in sync."
+            : !info.sync_enabled ? "Syncing is off."
+            : info.last_sync_at ? `Last synced ${new Date(info.last_sync_at).toLocaleString()}` : "Bringing your Jace messages in…"}</div>
+        </div>
+        {(info.state === "none" || info.state === "disconnected") &&
+          <button className="btn primary small" onClick={onConnect}>{info.state === "none" ? "Connect" : "Reconnect Jace"}</button>}
+      </div>
+      {connected && <>
+        <label className="check"><input type="checkbox" checked={info.sync_enabled} disabled={busy}
+          onChange={(e) => void run(() => api("/jace/messages", { method: "PATCH", body: { sync: e.target.checked } }))} />
+          Sync messages with Jace</label>
+        <p className="muted small" style={{ margin: 0 }}>Messages between you and other Jace people (and in group chats that came from Jace) are also saved to your Jace account. Text only.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn small" disabled={busy || !info.sync_enabled}
+            onClick={() => void run(() => api("/jace/messages/sync", { method: "POST" }), (r) => `Synced${typeof r.imported === "number" && r.imported ? ` - ${r.imported} new` : ""}`)}>
+            {busy ? "Syncing…" : "Sync now"}</button>
+          <button className="btn small danger" disabled={busy}
+            onClick={() => { if (confirm("Disconnect your Jace messages? Jace Social stops syncing with Jace and deletes its access to your Jace messages. Messages already here stay.")) void run(() => api("/jace/messages", { method: "DELETE" })); }}>
+            Disconnect Jace messages</button>
+        </div>
+      </>}
+      {info.last_error && info.state === "ok" && <div className="muted small">Last problem: {info.last_error}</div>}
+      {note && <div className="muted small">{note}</div>}
+    </div>
+  );
 }
 
 /** Accounts on this device: switch with one click, add another, or remove one. */

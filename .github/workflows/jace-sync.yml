@@ -1,0 +1,29 @@
+# Every 5 minutes: the Jace message sync's regular run (server/app/api/v1/jace/cron/route.ts) -
+# resend messages queued for Jace, pull new Jace messages for everyone connected. A GitHub
+# schedule instead of Vercel Cron because Vercel's free plan only allows daily cron jobs.
+# Needs the CRON_SECRET secret (the same value as the website's CRON_SECRET). Without it,
+# this does nothing.
+name: Jace message sync
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: jace-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run the sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "CRON_SECRET isn't set: nothing to do"; exit 0; fi
+          curl -sS --fail-with-body -m 90 -H "Authorization: Bearer $CRON_SECRET" https://jace-social.vercel.app/api/v1/jace/cron

@@ -30,7 +30,8 @@ If both accounts already had friends or chats, linking merges them into one.
 
 ## Features
 
-- **Friends:** add by Minecraft or Jace username, with requests, online status and unread counts.
+- **Jace messages:** sign in with Jace and your Jace conversations show up here, and messages between Jace people are also saved to your Jace account (Settings → Accounts → Jace messages turns it off). See [Privacy](https://jace-social.vercel.app/privacy).
+- **Friends:** add by @handle, Minecraft or Jace username, with requests, online status and unread counts.
 - **Direct messages and group chats:** up to 10 people per group, with a name, picture, and adding or removing people.
 - **Servers, like Discord:**
   - text, voice and announcement channels in categories, with private channels and slowmode

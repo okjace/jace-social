@@ -192,6 +192,18 @@ export async function postMessage(channel: Channel, members: string[], sender: P
   return data;
 }
 
+/**
+ * Messages are listed by their time, then id (history imported from Jace keeps its original
+ * times, so ids aren't always in time order). For "?before=<id>": the PostgREST filter for
+ * messages older than that one, or null if it doesn't exist.
+ */
+export async function olderThan(table: "messages" | "channel_messages", id: number): Promise<string | null> {
+  const { data } = await db().from(table).select("created_at").eq("id", id).maybeSingle();
+  if (!data) return null;
+  const t = `"${data.created_at}"`;
+  return `created_at.lt.${t},and(created_at.eq.${t},id.lt.${id})`;
+}
+
 /** Tell players something about a group or server changed (members, names, channels). */
 export async function notifyChanged(uuids: string[], event: "groups" | "servers", payload: Record<string, unknown>) {
   await notify(await inboxesOf(uuids), event, payload);

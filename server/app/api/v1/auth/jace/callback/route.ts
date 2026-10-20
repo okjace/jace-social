@@ -3,6 +3,7 @@
 // "you can close this tab" while the app picks the result up by polling.
 import { ApiError, createSession, db, mergeProfiles, newPlayerId, siteUrl, supabaseUrl, token, type Profile } from "@/lib/server";
 import { jaceUserFromCode, type JaceUser } from "@/lib/jace";
+import { saveConnection } from "@/lib/jaceSync";
 
 type Req = { state: string; purpose: "signin" | "link"; link_uuid: string | null; poll_hash: string | null; return_to: string };
 
@@ -34,7 +35,11 @@ async function signIn(u: JaceUser) {
   const { data: existing } = await db().from("profiles").select("*").eq("jace_sub", u.sub).maybeSingle();
   let p = existing as Profile | null;
   if (p) {
-    if (p.jace_name !== u.username) await db().from("profiles").update({ jace_name: u.username }).eq("uuid", p.uuid);
+    const patch: Partial<Profile> = {};
+    if (p.jace_name !== u.username) patch.jace_name = u.username;
+    // a placeholder made for their Jace messages (lib/jaceSync.ts) becomes their account
+    if (!p.signed_up) { patch.signed_up = new Date().toISOString(); if (!p.avatar_url && u.picture) patch.avatar_url = u.picture; }
+    if (Object.keys(patch).length) await db().from("profiles").update(patch).eq("uuid", p.uuid);
   } else {
     const row = {
       uuid: newPlayerId(), name: u.username, inbox: token(), signed_up: new Date().toISOString(),
@@ -44,6 +49,7 @@ async function signIn(u: JaceUser) {
     if (error) throw error;
     p = data as Profile;
   }
+  await saveConnection(p.uuid, u);                   // keep the token for syncing Jace messages
   const session = await createSession(p.uuid);
   return { ...session, uuid: p.uuid, realtime_url: supabaseUrl() ?? "", realtime_key: process.env.SUPABASE_PUBLISHABLE_KEY ?? "" };
 }
@@ -56,6 +62,7 @@ async function link(u: JaceUser, uuid: string) {
   }
   const { error } = await db().from("profiles").update({ jace_sub: u.sub, jace_name: u.username }).eq("uuid", uuid);
   if (error) throw error;
+  await saveConnection(uuid, u);                     // linking (or "Connect Jace messages") keeps the token too
   return { ok: "true", jace_name: u.username };
 }
 

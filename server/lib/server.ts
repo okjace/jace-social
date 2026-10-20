@@ -233,6 +233,8 @@ export function cleanUuid(u: unknown): string {
 /** Merge one player into another (account linking). Roles, reactions and bots move first
  *  (004_community.sql), then everything else (003_social.sql), which deletes src. */
 export async function mergeProfiles(src: string, dst: string) {
+  const jace = await db().rpc("merge_jace_sync", { src, dst });                                 // 007_jace_messages.sql
+  if (jace.error && !/merge_jace_sync/.test(jace.error.message)) throw jace.error;
   const extra = await db().rpc("merge_profiles_extra", { src, dst });
   if (extra.error && !/merge_profiles_extra/.test(extra.error.message)) throw extra.error;   // 004 not run yet: skip
   const { error } = await db().rpc("merge_profiles", { src, dst });

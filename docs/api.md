@@ -183,6 +183,24 @@ GET: preview the server an invite is for (works signed out too, for invite pages
 POST: join it. The code can be a server's invite code or its custom link (vanity).
 methods: GET methods: POST 
 
+## /api/v1/jace/cron
+GET: the Jace message sync's regular run (every 5 minutes): resend queued messages, pull new Jace
+messages for everyone connected. Only with Authorization: Bearer <CRON_SECRET>.
+methods: GET
+
+## /api/v1/jace/messages/sync
+POST: "Sync now" - bring in what's new from Jace and resend anything waiting -> the same as
+      GET /jace/messages, plus {imported}
+methods: POST
+
+## /api/v1/jace/messages
+Syncing your direct messages and group chats with your Jace messages (lib/jaceSync.ts).
+GET: {available, state: none|ok|disconnected|banned, sync_enabled, imported, last_sync_at, last_error}
+  none / disconnected: connect (or reconnect) with POST /link/jace, which signs in with Jace again
+PATCH {sync: boolean}: the "Sync messages with Jace" switch
+DELETE: "Disconnect Jace messages" - deletes the stored Jace token
+methods: GET methods: PATCH methods: DELETE
+
 ## /api/v1/link/jace
 POST: link a Jace account to the signed-in (Minecraft) player -> {url, state, poll_key}.
       Open url in a browser, then poll /api/v1/auth/jace/poll.

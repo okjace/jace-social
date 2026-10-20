@@ -1,7 +1,8 @@
 // GET ?before=<id>&around=<id>: 50 messages (oldest first) with senders, reactions and replied-to messages
 // POST {body, reply_to?, attachments?}: send a message to a group chat or server channel
 import { ApiError, body, db, handler, me } from "@/lib/server";
-import { MESSAGE_COLUMNS, channelFor, postMessage, profilesById, type Attachment } from "@/lib/chat";
+import { MESSAGE_COLUMNS, channelFor, olderThan, postMessage, profilesById, type Attachment } from "@/lib/chat";
+import { pullSoon, pushChannelLater } from "@/lib/jaceSync";
 import { has, P } from "@/lib/perms";
 import { reactionsFor, repliedTo } from "@/lib/reactions";
 import { cleanAttachments } from "@/lib/uploads";
@@ -14,10 +15,14 @@ export const GET = handler(async (req, ctx) => {
   const params = new URL(req.url).searchParams;
   const before = Number(params.get("before"));
   let q = db().from("channel_messages").select(MESSAGE_COLUMNS)
-    .eq("channel_id", channel.id).order("id", { ascending: false }).limit(50);
-  if (before) q = q.lt("id", before);
+    .eq("channel_id", channel.id).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50);
+  if (before) {
+    const older = await olderThan("channel_messages", before);
+    q = older ? q.or(older) : q.lt("id", before);
+  }
   const { data, error } = await q;
   if (error) throw error;
+  if (!channel.server_id) pullSoon(p.uuid);          // group chats can come from Jace (lib/jaceSync.ts)
   const msgs = (data ?? []).reverse() as unknown as { id: number; sender: string | null; reply_to: number | null }[];
   const replies = await repliedTo("channel_messages", msgs.map((m) => m.reply_to));
   const replied = Object.values(replies) as { sender: string | null }[];
@@ -56,5 +61,7 @@ export const POST = handler(async (req, ctx) => {
       .eq("channel_id", channel.id).eq("sender", p.uuid).gt("created_at", since);
     if (recent) throw new ApiError(429, `Slowmode is on: one message every ${channel.slowmode} seconds`);
   }
-  return { message: await postMessage(channel, members, p, text, "text", { reply_to: b.reply_to ? Number(b.reply_to) : null, attachments, perms }) };
+  const message = await postMessage(channel, members, p, text, "text", { reply_to: b.reply_to ? Number(b.reply_to) : null, attachments, perms });
+  if (!channel.server_id) pushChannelLater(p, channel.id, message as { id: number; body: string; created_at: string });
+  return { message };
 });
