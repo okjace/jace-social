@@ -125,9 +125,15 @@ async function setFailed(uuid: string, e: JaceError) {
  *  (like "added as a friend but never signed in"), which becomes theirs when they sign in with Jace. */
 async function profileForJace(sub: string, username: string | undefined, cache: Map<string, Profile>): Promise<Profile> {
   const hit = cache.get(sub);
-  if (hit) return hit;
+  if (hit && (!username || hit.signed_up || hit.jace_name === username)) return hit;
   const find = async () => (await db().from("profiles").select("*").eq("jace_sub", sub).maybeSingle()).data as Profile | null;
-  let p = await find();
+  let p = hit ?? await find();
+  // a placeholder made without a name (Jace's group list only has ids) takes it when it shows up
+  if (p && !p.signed_up && username && p.jace_name !== username) {
+    const name = username.slice(0, 32);
+    await db().from("profiles").update({ name, jace_name: name }).eq("uuid", p.uuid);
+    p = { ...p, name, jace_name: name };
+  }
   if (!p) {
     const name = (username || "Jace user").slice(0, 32);
     const { data, error } = await db().from("profiles").insert({

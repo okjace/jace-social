@@ -6,7 +6,8 @@
 //     JACE_TOKEN_KEY=$(openssl rand -base64 32) CRON_SECRET=test-cron npm run dev   # terminal 2
 //   CRON_SECRET=test-cron node scripts/test-jace-sync.mjs         # terminal 3
 //
-// Start each run with a fresh mock and an empty test database: it checks exact counts.
+// Start each run with a fresh mock and an empty test database (scripts/reset-test-db.sh): it checks
+// exact counts.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
