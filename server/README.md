@@ -38,7 +38,7 @@ messages API; Jace's own site no longer shows them, so Jace Social is where they
 
 - **Connect:** "Sign in with Jace" asks for `profile messages`. The access token is kept encrypted
   with `JACE_TOKEN_KEY` (AES-256-GCM) in `jace_connections`, never sent to clients. People who
-  signed in before get a one-time "Connect your Jace messages" prompt (it signs in with Jace again).
+  signed in before connect in Settings → Accounts → Jace messages (it signs in with Jace again).
 - **Import:** the first sync copies every Jace conversation once, with original times. Jace people
   who never used Jace Social get a placeholder profile, which becomes theirs when they sign in with
   Jace; people who talk on Jace become friends here so their chat shows up.

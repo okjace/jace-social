@@ -20,7 +20,6 @@ import { nameStyle } from "./Message";
 import { MinecraftDevice } from "./MinecraftDevice";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
-import { ConnectJaceMessages } from "./ConnectJaceMessages";
 import { AccountSwitcher, AddServerModal, NewGroupModal, ProfileModal, SettingsModal, StatusEditor, type SettingsTab } from "./Modals";
 import { ServerOnboarding, Welcome } from "./Onboarding";
 import { inviteLink, ServerSettings } from "./ServerSettings";
@@ -623,7 +622,6 @@ function Main({ me, setMe, signOut, inviteCode }: {
       )}
       <CallPanel calls={calls} info={call} people={people} />
       <NewVersion busy={call.state !== "idle" || !!room.channelId} />
-      <ConnectJaceMessages me={me} onOpen={() => setModal({ kind: "settings", tab: "accounts" })} />
       {moveCall && call.state === "idle" && (
         <div className="call-panel" role="dialog" aria-label="Move your call here">
           <Avatar p={people[moveCall.peer] ?? { name: moveCall.name || "?" }} size={44} />
