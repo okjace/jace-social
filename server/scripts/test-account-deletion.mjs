@@ -59,7 +59,8 @@ step("carol and alice are friends; alice has a profile and a chat with carol");
 const carol = await signIn("carol");
 await api(carol.token, "/me", { method: "PATCH", body: { handle: "carol_test" } });
 const alice = await signIn("alice");
-await api(alice.token, "/me", { method: "PATCH", body: { handle: "alice_test", bio: "I build castles", settings: { accent: "#e0605a" } } });
+await api(alice.token, "/me", { method: "PATCH", body: { bio: "I build castles", settings: { accent: "#e0605a" } } });
+assert.equal((await api(alice.token, "/me")).handle, "alice", "her handle, from her Jace name");
 await api(alice.token, "/friends", { body: { name: "@carol_test" } });
 await api(carol.token, "/friends", { body: { uuid: alice.uuid } });
 await api(alice.token, "/messages", { body: { to: carol.uuid, body: "before I deleted it" } });
@@ -67,6 +68,11 @@ assert.ok((await api(carol.token, "/friends")).friends.some((f) => f.uuid === al
 await api(alice.token, "/jace/messages", { method: "PATCH", body: { sync: true } });   // she syncs her Jace messages
 await until("alice's Jace import", async () => (await api(alice.token, "/jace/messages")).imported, 60_000);
 const [bob] = await sb("profiles?jace_name=eq.bob&select=uuid");
+// bob syncs too: his Jace chat with alice and their "Build crew" group
+const bobS = await signIn("bob");
+await api(bobS.token, "/jace/messages", { method: "PATCH", body: { sync: true } });
+await until("bob's Jace import", async () => (await api(bobS.token, "/jace/messages")).imported, 60_000);
+assert.ok((await api(alice.token, "/groups")).groups.some((g) => g.name === "Build crew"), "alice is in Build crew");
 const withBobBefore = (await api(alice.token, `/messages?with=${bob.uuid}`)).messages.length;
 assert.ok(withBobBefore > 0, "alice's Jace chat with bob came in");
 
@@ -89,16 +95,22 @@ step("deleted: signed out everywhere, gone for carol");
 assert.equal((await api(alice.token, "/me", { allowError: true })).status, 401);
 assert.equal((await api(fresh.token, "/me", { allowError: true })).status, 401);
 assert.ok(!(await api(carol.token, "/friends")).friends.some((f) => f.name === "alice"), "not in carol's friends");
-assert.equal((await api(carol.token, "/friends", { body: { name: "@alice_test" }, allowError: true })).status, 404, "handle not findable");
+assert.equal((await api(carol.token, "/friends", { body: { name: "@alice" }, allowError: true })).status, 404, "handle not findable");
 assert.equal((await api(carol.token, `/messages?with=${alice.uuid}`)).messages.length, 0, "the old id has nothing now");
 
 step("signing in again makes a new, empty account");
 const again = await signIn("alice");
 assert.notEqual(again.uuid, alice.uuid);
 const newMe = await api(again.token, "/me");
-assert.notEqual(newMe.handle, "alice_test", "the old handle stays reserved");
+assert.equal(newMe.handle, "alice", "the handle was freed: the new account gets it (not alice2)");
 assert.equal(newMe.bio, null);
 assert.equal((await api(again.token, "/jace/messages")).sync_enabled, false, "signing in doesn't sync");
+// other people's syncs (bob's, the regular cron run) don't pull the new account into old chats either
+const cron = () => fetch(`${BASE}/api/v1/jace/cron`, { headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` } }).then((r) => r.json());
+await api(bobS.token, "/jace/messages/sync", { body: {} });
+await cron();
+assert.equal((await api(again.token, "/groups")).groups.length, 0, "not put back in Build crew by bob's sync");
+assert.deepEqual((await api(again.token, "/friends")).friends.map((f) => f.name), [], "no friends back from bob's sync");
 // even turning syncing on doesn't bring back the deleted account's Jace chats (only newer ones)
 await api(again.token, "/jace/messages", { method: "PATCH", body: { sync: true } });
 await until("the new account's Jace import", async () => (await api(again.token, "/jace/messages")).imported, 60_000);
@@ -114,7 +126,7 @@ step("the right one turns this account back into the old one");
 assert.match((await askBot(again.token, `here it is: ${deleted.recovery_id.toLowerCase()}`)).body, /Welcome back/);
 const back = await api(again.token, "/me");                  // same session, same id as the new account
 assert.equal(back.uuid, again.uuid);
-assert.equal(back.handle, "alice_test");
+assert.equal(back.handle, "alice");
 assert.equal(back.bio, "I build castles");
 assert.equal(back.settings.accent, "#e0605a");
 assert.ok((await api(again.token, "/friends")).friends.some((f) => f.uuid === carol.uuid), "friends with carol again");
@@ -135,8 +147,8 @@ const deleted2 = await api(fresh2.token, "/me", { method: "DELETE" });
 const [parked] = await sb(`profiles?recover_hash=eq.${sha256(deleted2.recovery_id.replace(/-/g, ""))}&select=uuid`);
 assert.ok(parked, "set aside");
 await sb(`profiles?uuid=eq.${parked.uuid}`, { method: "PATCH", body: JSON.stringify({ recover_expires_at: new Date(Date.now() - 1000).toISOString() }) });
-const cron = await fetch(`${BASE}/api/v1/jace/cron`, { headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` } }).then((r) => r.json());
-assert.equal(cron.purged, 1);
+const purge = await fetch(`${BASE}/api/v1/jace/cron`, { headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` } }).then((r) => r.json());
+assert.equal(purge.purged, 1);
 assert.equal((await sb(`profiles?uuid=eq.${parked.uuid}&select=uuid`)).length, 0);
 const third = await signIn("alice");
 assert.match((await askBot(third.token, deleted2.recovery_id)).body, /doesn't work/);
