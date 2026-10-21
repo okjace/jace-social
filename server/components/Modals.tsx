@@ -11,6 +11,7 @@ import {
 } from "@/lib/client";
 import { ActivityCard, Avatar, Modal, PersonRow } from "./ui";
 import { Link } from "./Markdown";
+import { BotTag } from "./JaceBot";
 import { MemberActions } from "./ServerSettings";
 
 type Err = (m: string) => void;
@@ -44,7 +45,8 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
       <div className="profile-head"><Avatar p={p} size={92} status={p.status} /></div>
       <div className="modal-body">
         <div>
-          <h2>{member?.nickname || p.name}{p.is_bot && <span className="bot-tag" style={{ marginLeft: 8, verticalAlign: "middle" }}>BOT</span>}</h2>
+          <h2>{member?.nickname || p.name}<BotTag p={p} style={{ marginLeft: 8, verticalAlign: "middle" }} />
+            {p.banned && <span className="chip" style={{ marginLeft: 8, color: "var(--red)" }}>Banned</span>}</h2>
           {member?.nickname && <div className="muted small">{p.name}</div>}
           <div className="muted small">
             {[p.handle ? `@${p.handle}` : p.jace_name && `@${p.jace_name}`, p.minecraft_name && `⛏ ${p.minecraft_name}`, p.pronouns].filter(Boolean).join(" · ")}
@@ -73,6 +75,9 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
         </div>
       )}
       {activity && <BotActivity bot={{ uuid: p.uuid, name: p.name }} server={p.bot_owner === me?.uuid ? undefined : detail?.server.id} onClose={() => setActivity(false)} />}
+      {me?.jace_staff && !p.is_you && !p.is_bot && <BanButtons p={p} onChanged={async () => {
+        setP(await api<FullProfile>(`/users/${uuid}`)); onChanged();
+      }} onError={onError} />}
       {!p.is_you && !p.is_bot && (
         <div className="modal-foot">
           {p.is_friend ? <>
@@ -82,6 +87,30 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
         </div>
       )}
     </Modal>
+  );
+}
+
+/** For the people running the official Jace bot: ban someone from all of Jace Social (and Jace). */
+function BanButtons({ p, onChanged, onError }: { p: FullProfile; onChanged: () => Promise<void>; onError: Err }) {
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => Promise<{ jace_error?: string | null }>) => {
+    setBusy(true);
+    try { const r = await fn(); if (r.jace_error) onError(`Done here, but Jace said: ${r.jace_error}`); await onChanged(); }
+    catch (e) { onError((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="modal-foot" style={{ justifyContent: "flex-start" }}>
+      <span className="muted small grow">Jace bot moderation</span>
+      {p.banned
+        ? <button className="btn small" disabled={busy} onClick={() => void run(() =>
+            api(`/jace-bot/ban?uuid=${p.uuid}&jace=${p.jace_name && confirm("Also unban their Jace account?") ? "1" : "0"}`, { method: "DELETE" }))}>Unban</button>
+        : <button className="btn small danger" disabled={busy} onClick={() => {
+            const reason = prompt(`Ban ${p.name} from all of Jace Social? They're signed out everywhere and can't sign in again.\nReason (optional):`);
+            if (reason === null) return;
+            const jace = !!p.jace_name && confirm(`Also ban their Jace account (@${p.jace_name})?`);
+            void run(() => api("/jace-bot/ban", { body: { uuid: p.uuid, reason, jace } }));
+          }}>⛔ Ban from Jace Social</button>}
+    </div>
   );
 }
 
@@ -404,7 +433,7 @@ export function AccountSwitcher({ me, compact }: { me: Me; compact?: boolean }) 
       {list.map((a) => (
         <div key={a.uuid} className={`account-row${a.uuid === me.uuid ? " current" : ""}`}>
           <Avatar p={{ name: a.name, avatar_url: a.avatar_url }} size={compact ? 28 : 36} />
-          <div className="grow"><b>{a.name}</b>{a.is_bot && <span className="bot-tag" style={{ marginLeft: 6 }}>BOT</span>}
+          <div className="grow"><b>{a.name}</b><BotTag p={a} style={{ marginLeft: 6 }} />
             {a.uuid === me.uuid && <div className="muted small">Signed in</div>}</div>
           {a.uuid !== me.uuid && <button className="btn small primary" onClick={() => switchAccount(a.uuid)}>Switch</button>}
           {a.uuid !== me.uuid && <button className="icon-btn" title="Remove from this device" onClick={() => { forgetAccount(a.uuid); setList(savedAccounts()); }}>✕</button>}

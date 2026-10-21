@@ -44,6 +44,7 @@ const gms = [
 const externalIds = new Map();        // client_id:external_id -> stored id
 const codes = new Map();              // code -> {user, client_id}
 const tokens = new Map();             // token -> {user, client_id, scope}
+const moderationLog = [];             // bans and unbans by apps
 
 const json = (res, status, body) => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((ok) => { let d = ""; req.on("data", (c) => (d += c)); req.on("end", () => ok(d)); });
@@ -96,7 +97,8 @@ createServer(async (req, res) => {
       else dms.push({ id: `m-${randomUUID()}`, from_id: u.sub, from_name: u.username, to_id: users[b.to].sub, body: b.body, created_at: at });
       return json(res, 200, { ok: true });
     }
-    if (path === "/mock/state") return json(res, 200, { dms, gms, groups, external_ids: Object.fromEntries(externalIds) });
+    if (path === "/mock/state") return json(res, 200, { dms, gms, groups, external_ids: Object.fromEntries(externalIds), moderation: moderationLog,
+      banned: Object.values(users).filter((u) => u.banned).map((u) => u.username) });
     return json(res, 404, { error: "not_found" });
   }
 
@@ -119,6 +121,20 @@ createServer(async (req, res) => {
     users[c.user].revoked = false;                   // signing in again gives a working token
     tokens.set(token, c);
     return json(res, 200, { access_token: token, token_type: "Bearer", expires_in: 365 * 86400, scope: c.scope });
+  }
+
+  // --- moderation, for Jace's official apps (client id and secret, HTTP Basic)
+  if (path === "/api/oauth/moderation" && req.method === "POST") {
+    const basic = (req.headers.authorization ?? "").replace(/^Basic /, "");
+    const [cid, secret] = Buffer.from(basic, "base64").toString().split(":");
+    if (!cid || !secret) return json(res, 401, { error: "invalid_client" });
+    const b = JSON.parse((await readBody(req)) || "{}");
+    const u = bySub(b.user_id) ?? users[b.username];
+    if (!u) return json(res, 404, { error: "not_found" });
+    if (b.action === "ban") u.banned = true;
+    if (b.action === "unban") u.banned = false;
+    moderationLog.push({ action: b.action, user: u.username, reason: b.reason ?? "" });
+    return json(res, 200, { user_id: u.sub, username: u.username, banned: u.banned, ban_reason: b.reason ?? null, muted: u.muted });
   }
 
   // --- everything else needs a token

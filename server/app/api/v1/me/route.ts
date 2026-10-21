@@ -2,6 +2,7 @@
 // PATCH {display_name?, handle?, bio?, pronouns?, accent_color?, links?, status?, custom_status?, status_emoji?}
 //   handle: your unique @name (3-20: letters, numbers, _ and .), changeable once every 7 days
 import { connectionInfo } from "@/lib/jaceSync";
+import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
   type Profile } from "@/lib/server";
 
@@ -45,8 +46,9 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
 
 export const GET = handler(async (req) => {
   const p = await me(req);
-  // Jace-linked people: whether their Jace messages are connected (for the "Connect" prompt)
-  return { ...own(p), jace_messages: p.jace_sub ? await connectionInfo(p.uuid) : null };
+  await welcomeOnce(p);                              // the Jace bot's first message to them (lib/jaceBot.ts)
+  // Jace-linked people: whether their Jace messages are connected (Settings -> Accounts)
+  return { ...own(p), jace_messages: p.jace_sub ? await connectionInfo(p.uuid) : null, jace_staff: await isJaceStaff(p) };
 });
 
 const STATUSES = ["online", "idle", "dnd", "invisible"];

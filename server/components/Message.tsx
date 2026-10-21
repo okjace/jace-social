@@ -1,6 +1,7 @@
 "use client";
 // One message in a chat: who sent it, the text, files, link previews, reactions, the
 // message it replies to, and the hover toolbar.
+import { BotTag } from "./JaceBot";
 import { useState } from "react";
 import { timeLabel, type Attachment, type Embed, type Message, type Person, type ReplyPreview, type Role } from "@/lib/client";
 import { EmojiPicker, QUICK_REACTIONS } from "./EmojiPicker";
@@ -104,7 +105,7 @@ export function MessageRow({ m, first, sender, mine, mentions, roles, reply, rep
         {showHead && !system && (
           <div className="meta">
             <b style={{ color: ns.color }} onClick={() => m.sender && onOpenProfile(m.sender)}>{ns.name}</b>
-            {sender?.is_bot && <span className="bot-tag">BOT</span>}
+            <BotTag p={sender} />
             <span className="time">{timeLabel(m.created_at)}</span>
             {m.pinned_at && <span className="muted small" title="Pinned">📌</span>}
           </div>

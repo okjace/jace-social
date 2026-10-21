@@ -35,7 +35,12 @@ export type Profile = {
   is_bot?: boolean; bot_owner?: string | null; bot_public?: boolean; bot_commands?: unknown[]; bot_program?: unknown; bot_code?: string | null;
   bot_enabled?: boolean; banner_url?: string | null; settings?: Record<string, unknown>; onboarded_at?: string | null;
   handle?: string | null; handle_changed_at?: string | null;
+  banned_at?: string | null; ban_reason?: string | null; jace_welcome?: string | null;
 };
+
+/** The official Jace bot's player id (lib/bots.ts, lib/jaceBot.ts). */
+export const JACE_BOT = "00000000000000000000000000000ace";
+const BANNED = "This account is banned from Jace Social";
 export type Status = "online" | "idle" | "dnd" | "invisible";
 /**
  * Rich presence. type says where they are; the rest is optional detail:
@@ -86,10 +91,14 @@ export async function me(req: Request): Promise<Profile> {
   const { data } = await db().from("sessions").select("uuid, expires_at, profiles(*)")
     .eq("token_hash", sha256(t)).maybeSingle();
   if (!data || new Date(data.expires_at) < new Date()) throw new ApiError(401, "Session expired - sign in again");
-  return data.profiles as unknown as Profile;
+  const p = data.profiles as unknown as Profile;
+  if (p.banned_at) throw new ApiError(403, BANNED);        // banned by the Jace bot (lib/jaceBot.ts)
+  return p;
 }
 
 export async function createSession(uuid: string) {
+  const { data: who } = await db().from("profiles").select("banned_at").eq("uuid", uuid).maybeSingle();
+  if (who?.banned_at) throw new ApiError(403, BANNED);
   const t = token();
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
   const { error } = await db().from("sessions").insert({ token_hash: sha256(t), uuid, expires_at: expires });
@@ -171,6 +180,7 @@ export function publicProfile(p: Profile) {
     avatar_url: avatarFor(p),
     bio: p.bio ?? null, pronouns: p.pronouns ?? null, accent_color: p.accent_color ?? null, links: p.links ?? [],
     banner_url: p.banner_url ?? null, is_bot: !!p.is_bot, bot_owner: p.is_bot ? p.bot_owner ?? null : null,
+    official: p.uuid === JACE_BOT, banned: !!p.banned_at,
   };
 }
 

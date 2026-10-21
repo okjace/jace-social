@@ -20,13 +20,14 @@ import { nameStyle } from "./Message";
 import { MinecraftDevice } from "./MinecraftDevice";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
+import { Announcements, BotTag, Docs, JACE_BOT, JaceInbox, JaceTabs, inboxPerson, type InboxEntry } from "./JaceBot";
 import { AccountSwitcher, AddServerModal, NewGroupModal, ProfileModal, SettingsModal, StatusEditor, type SettingsTab } from "./Modals";
 import { ServerOnboarding, Welcome } from "./Onboarding";
 import { inviteLink, ServerSettings } from "./ServerSettings";
 import { ActivityCard, Avatar, PersonRow } from "./ui";
 import { useVoice, VoiceBar, VoiceRoom, VoiceUsers } from "./Voice";
 
-type FriendsData = { friends: Person[]; incoming: Person[]; outgoing: Person[] };
+type FriendsData = { friends: Person[]; incoming: Person[]; outgoing: Person[]; jace?: Person | null };
 type View =
   | { kind: "home" }
   | { kind: "dm"; uuid: string }
@@ -142,6 +143,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const [view, setView] = useState<View>({ kind: "home" });
   const [friends, setFriends] = useState<FriendsData>({ friends: [], incoming: [], outgoing: [] });
   const [groups, setGroups] = useState<Group[]>([]);
+  const [jaceTab, setJaceTab] = useState<"chat" | "announcements" | "docs">("chat");
+  const [jaceInbox, setJaceInbox] = useState<InboxEntry[]>([]);
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [detail, setDetail] = useState<ServerDetail | null>(null);
   const [reload, setReload] = useState(0);              // bump to reload the open chat
@@ -199,6 +202,11 @@ function Main({ me, setMe, signOut, inviteCode }: {
   }, [calls, voice]);
 
   const loadFriends = useCallback(() => api<FriendsData>("/friends").then(setFriends).catch((e) => err(e.message)), [err]);
+  const loadInbox = useCallback(() => {
+    if (me.uuid !== JACE_BOT) return;
+    void api<{ people: InboxEntry[] }>("/jace-bot/inbox").then((d) => setJaceInbox(d.people)).catch(() => {});
+  }, [me.uuid]);
+  useEffect(() => { loadInbox(); }, [loadInbox]);
   const loadGroups = useCallback(() => api<{ groups: Group[] }>("/groups").then((d) => setGroups(d.groups)).catch((e) => err(e.message)), [err]);
   const loadServers = useCallback(() => api<{ servers: ServerItem[] }>("/servers").then((d) => setServers(d.servers)).catch((e) => err(e.message)), [err]);
   const loadDetail = useCallback(async (id: string) => {
@@ -235,10 +243,12 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const people = useMemo(() => {
     const m: Record<string, Person> = {};
     for (const f of [...friends.friends, ...friends.incoming, ...friends.outgoing]) m[f.uuid] = f;
+    if (friends.jace) m[friends.jace.uuid] = friends.jace;                 // the official Jace bot
+    for (const e of jaceInbox) m[e.uuid] ??= inboxPerson(e);              // signed in as the Jace bot: who wrote to it
     for (const g of groups) for (const p of g.members) m[p.uuid] ??= p;
     for (const p of detail?.members ?? []) m[p.uuid] = p;
     return m;
-  }, [friends, groups, detail]);
+  }, [friends, groups, detail, jaceInbox]);
 
   // live updates
   useEffect(() => {
@@ -255,6 +265,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
         else notifyUser(`${p.name ?? "A friend"}`, "Sent you a message", { important: true, muteKey: [p.from] });
         clearTyping(`dm:${p.from}`, p.from);
         void loadFriends();
+        loadInbox();
       } else if (event === "dm_update") {
         if (v.kind === "dm" && (v.uuid === p.from || v.uuid === p.with)) setReload((n) => n + 1);
       } else if (event === "friends") {
@@ -275,6 +286,9 @@ function Main({ me, setMe, signOut, inviteCode }: {
       } else if (event === "typing") {
         const key = p.dm ? `dm:${p.from}` : `ch:${p.channel_id}`;
         setTyping((t) => ({ ...t, [key]: { ...(t[key] ?? {}), [p.from]: { name: p.name, until: Date.now() + 8000 } } }));
+      } else if (event === "jace_support") {          // someone asked the Jace bot for a person
+        loadInbox();
+        notifyUser(`${p.name ?? "Someone"} wants a person`, "In the Jace inbox", { important: true });
       } else if (event === "groups") {
         void loadGroups();
       } else if (event === "servers") {
@@ -296,7 +310,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
     function clearTyping(key: string, from: string) {
       setTyping((t) => { if (!t[key]?.[from]) return t; const c = { ...t[key] }; delete c[from]; return { ...t, [key]: c }; });
     }
-  }, [me.realtime, me.inbox, notifyUser, calls, voice, loadFriends, loadGroups, loadServers, loadDetail, loadGroupCall]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [me.realtime, me.inbox, notifyUser, calls, voice, loadFriends, loadGroups, loadServers, loadDetail, loadGroupCall, loadInbox]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // typing indicators fade after 8 seconds
   useEffect(() => {
@@ -491,6 +505,16 @@ function Main({ me, setMe, signOut, inviteCode }: {
                 {g.unread > 0 && !muted.includes(g.id) && <span className="badge">{g.unread}</span>}
               </button>
             ))}
+            {me.uuid === JACE_BOT && <JaceInbox entries={jaceInbox} active={view.kind === "dm" ? view.uuid : null}
+              onOpen={(e) => { go({ kind: "dm", uuid: e.uuid }); }} />}
+            {friends.jace && (
+              <button className={`side-item${view.kind === "dm" && view.uuid === JACE_BOT ? " active" : ""}${friends.jace.unread ? " unread" : ""}`}
+                onClick={() => { setJaceTab("chat"); go({ kind: "dm", uuid: JACE_BOT }); }}>
+                <Avatar p={friends.jace} size={32} />
+                <span className="name">{friends.jace.name} <BotTag p={friends.jace} /><span className="sub">Ask me a question</span></span>
+                {!!friends.jace.unread && <span className="badge">{friends.jace.unread}</span>}
+              </button>
+            )}
             <div className="side-label">Direct messages</div>
             {sortFriends(friends.friends).map((f) => (
               <button key={f.uuid} className={`side-item${view.kind === "dm" && view.uuid === f.uuid ? " active" : ""}${f.unread && !muted.includes(f.uuid) ? " unread" : ""}${muted.includes(f.uuid) ? " muted-chan" : ""}`}
@@ -512,7 +536,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
           <span onClick={() => setMenu(menu === "account" ? null : "account")} style={{ cursor: "pointer" }} title="Switch accounts">
             <Avatar p={me} size={34} status={me.status === "invisible" ? "offline" : me.status} /></span>
           <div className="who" onClick={() => setModal({ kind: "status" })} title="Set status">
-            <b>{me.name}{me.is_bot && <span className="bot-tag" style={{ marginLeft: 6 }}>BOT</span>}</b>
+            <b>{me.name}<BotTag p={me} style={{ marginLeft: 6 }} /></b>
             <span>{me.custom_status ? `${me.status_emoji ?? ""} ${me.custom_status}` : statusLabel[me.status]}</span>
           </div>
           <button className="icon-btn" title="Settings" onClick={() => setModal({ kind: "settings" })}>⚙</button>
@@ -538,14 +562,19 @@ function Main({ me, setMe, signOut, inviteCode }: {
         {view.kind === "dm" && dmPerson && <>
           <div className="main-head">
             <button className="icon-btn mobile-only" onClick={() => setMobileMain(false)}>←</button>
-            <Avatar p={dmPerson} size={26} status={dmPerson.status} /><span className="title">{dmPerson.name}</span>
+            <Avatar p={dmPerson} size={26} status={dmPerson.status} /><span className="title">{dmPerson.name} <BotTag p={dmPerson} /></span>
             <span className="topic">{shortLine(dmPerson)}</span>
             {Calls.supported() && <button className="icon-btn" title={`Voice call ${dmPerson.name}`} aria-label="Start a voice call"
               disabled={call.state !== "idle"} onClick={() => void calls.call(dmPerson.uuid, dmPerson.name)}>📞</button>}
             <button className="icon-btn" title={muted.includes(dmPerson.uuid) ? "Unmute" : "Mute"} onClick={() => void toggleMute(dmPerson.uuid)}>{muted.includes(dmPerson.uuid) ? "🔕" : "🔔"}</button>
           </div>
+          {dmPerson.uuid === JACE_BOT && <JaceTabs tab={jaceTab} setTab={setJaceTab} me={me} onError={err} />}
+          {dmPerson.uuid === JACE_BOT && jaceTab === "announcements" && <Announcements me={me} onError={err} />}
+          {dmPerson.uuid === JACE_BOT && jaceTab === "docs" && <Docs me={me} onError={err} />}
+          {(dmPerson.uuid !== JACE_BOT || jaceTab === "chat") &&
           <Chat target={{ kind: "dm", uuid: dmPerson.uuid, name: dmPerson.name }} me={me} people={people} reloadKey={reload}
-            onOpenProfile={setProfile} onError={err} placeholder={`Message ${dmPerson.name}`} settings={settings} typing={typingIn(`dm:${dmPerson.uuid}`)} />
+            onOpenProfile={setProfile} onError={err} placeholder={dmPerson.uuid === JACE_BOT ? "Ask me a question" : `Message ${dmPerson.name}`}
+            settings={settings} typing={typingIn(`dm:${dmPerson.uuid}`)} />}
         </>}
         {view.kind === "group" && group && <>
           <div className="main-head">
@@ -668,7 +697,7 @@ function MemberList({ members, roles, owner, onOpen }: { members: Person[]; role
           <button key={m.uuid} className="side-item" onClick={() => onOpen(m.uuid)} style={{ opacity: m.online ? 1 : 0.55 }}>
             <Avatar p={m} size={32} status={m.status} />
             <span className="name"><span style={{ color: ns.color }}>{ns.name}</span>
-              {m.is_bot && <span className="bot-tag" style={{ marginLeft: 5 }}>BOT</span>}
+              <BotTag p={m} style={{ marginLeft: 5 }} />
               {m.uuid === owner && <span title="Owner"> 👑</span>}
               <span className="sub">{shortLine(m)}</span></span>
           </button>

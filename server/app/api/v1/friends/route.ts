@@ -1,11 +1,13 @@
-// GET: friends (with online status + what they're doing), incoming and outgoing requests
+// GET: friends (with online status + what they're doing), incoming and outgoing requests, and
+//   jace: the official Jace bot (everyone can message it), with its unread count
 // POST {name} or {uuid}: send a friend request. name can be a Minecraft username (works even if they
 //   haven't used Jace Social yet), someone's @handle, or a Jace username (write @name to skip Minecraft).
 // DELETE ?uuid=: remove a friend or cancel/decline a request
 import {
-  ApiError, body, cleanUuid, db, ensureProfile, friendsOf, handler, me, mojangLookup, notify, profileByHandle, publicProfile,
+  ApiError, body, cleanUuid, db, ensureProfile, friendsOf, handler, JACE_BOT, me, mojangLookup, notify, profileByHandle, publicProfile,
   type Profile,
 } from "@/lib/server";
+import { ensureJaceBot } from "@/lib/bots";
 
 export const GET = handler(async (req) => {
   const p = await me(req);
@@ -19,8 +21,10 @@ export const GET = handler(async (req) => {
   const { data: unread } = await db().from("messages").select("sender").eq("recipient", p.uuid).is("read_at", null);
   const unreadBy: Record<string, number> = {};
   for (const m of unread ?? []) unreadBy[m.sender] = (unreadBy[m.sender] ?? 0) + 1;
+  const jace = p.uuid === JACE_BOT ? null : { ...publicProfile(await ensureJaceBot()), unread: unreadBy[JACE_BOT] ?? 0 };
   return {
-    friends: friends.map((f) => ({ ...publicProfile(f), unread: unreadBy[f.uuid] ?? 0 })),
+    jace,
+    friends: friends.filter((f) => f.uuid !== JACE_BOT).map((f) => ({ ...publicProfile(f), unread: unreadBy[f.uuid] ?? 0 })),
     incoming: (pending.data ?? []).filter((r) => r.addressee === p.uuid).map((r) => publicProfile(r.a as unknown as Profile)),
     outgoing: (pending.data ?? []).filter((r) => r.requester === p.uuid).map((r) => publicProfile(r.b as unknown as Profile)),
   };

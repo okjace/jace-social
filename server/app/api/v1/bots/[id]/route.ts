@@ -27,6 +27,8 @@ export const PATCH = handler(async (req, ctx) => {
   const p = await me(req);
   const bot = await myBot(p, (await ctx.params).id);
   const b = await body<{ name?: string; bio?: string | null; bot_public?: boolean; bot_enabled?: boolean; bot_commands?: unknown[] }>(req);
+  if (bot.uuid === JACE_BOT && (b.bot_public === false || b.bot_enabled === false))
+    throw new ApiError(400, "The official Jace bot stays public and on");
   const patch: Record<string, unknown> = {};
   if (b.name !== undefined) patch.name = cleanName(b.name, "Bot name", 32);
   if (b.bio !== undefined) {
@@ -54,6 +56,7 @@ export const PATCH = handler(async (req, ctx) => {
 export const DELETE = handler(async (req, ctx) => {
   const p = await me(req);
   const bot = await myBot(p, (await ctx.params).id);
+  if (bot.uuid === JACE_BOT) throw new ApiError(400, "The official Jace bot can't be deleted");
   await db().from("profiles").delete().eq("uuid", bot.uuid);
   return { ok: true };
 });

@@ -34,6 +34,11 @@ export default function Privacy() {
           <b> Disconnect Jace messages</b> to delete the token. Messages already copied stay where they are.
           Conversations with Minecraft-only players are never sent to Jace.</p>
 
+        <h2>The Jace bot</h2>
+        <p>The official Jace bot answers questions with AI: your chat with it (the latest messages) is sent to Anthropic's Claude to write
+          its answer, and isn't used to train it. Press <b>Talk to a person</b> and the people running the Jace bot answer instead -
+          they can read your chat with it. The Jace bot also sends announcements to everyone.</p>
+
         <h2>Who sees what</h2>
         <p>Your friends see your status and what you're playing; you can go invisible. Bots only see what's in the chats they're added to,
           and everything a bot does is logged for its owner and the server's admins. We don't sell your data or show ads.</p>

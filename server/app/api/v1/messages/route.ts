@@ -1,7 +1,8 @@
 // GET ?with=<uuid>&before=<id>: chat history with a friend (newest 50, oldest first), with reactions
 //   and the messages replied to
 // POST {to, body, reply_to?, attachments?}: send a message to a friend
-import { ApiError, areFriends, body, cleanUuid, db, handler, me, notify } from "@/lib/server";
+import { ApiError, areFriends, body, cleanUuid, db, handler, JACE_BOT, me, notify } from "@/lib/server";
+import { answerLater } from "@/lib/jaceBot";
 import { olderThan } from "@/lib/chat";
 import { pullSoon, pushDmLater } from "@/lib/jaceSync";
 import { previewLater } from "@/lib/embeds";
@@ -41,11 +42,14 @@ export const POST = handler(async (req) => {
   const attachments = cleanAttachments(b.attachments, p.uuid);
   if (!text && !attachments.length) throw new ApiError(400, "Message is empty");
   if (text.length > 2000) throw new ApiError(400, "Messages can be up to 2000 characters");
-  if (!(await areFriends(p.uuid, to))) throw new ApiError(403, "You can only message friends");
+  // anyone can message the official Jace bot, and it can message anyone
+  const official = p.uuid === JACE_BOT || to === JACE_BOT;
+  if (to === p.uuid) throw new ApiError(400, "That's you");
+  if (!official && !(await areFriends(p.uuid, to))) throw new ApiError(403, "You can only message friends");
   const minuteAgo = new Date(Date.now() - 60_000).toISOString();
   const { count } = await db().from("messages").select("id", { count: "exact", head: true })
     .eq("sender", p.uuid).gt("created_at", minuteAgo);
-  if ((count ?? 0) >= 20) throw new ApiError(429, "Slow down a little - try again in a minute");
+  if ((count ?? 0) >= (p.uuid === JACE_BOT ? 300 : 20)) throw new ApiError(429, "Slow down a little - try again in a minute");
   let replyTo: number | null = null;
   if (b.reply_to) {
     const { data: parent } = await db().from("messages").select("id, sender, recipient").eq("id", Number(b.reply_to)).maybeSingle();
@@ -59,6 +63,7 @@ export const POST = handler(async (req) => {
   if (error) throw error;
   const { data: o } = await db().from("profiles").select("inbox").eq("uuid", to).single();
   if (o) await notify([o.inbox], "message", { from: p.uuid, name: p.name, id: data.id });
+  if (to === JACE_BOT) answerLater(p);               // the Jace bot answers (AI, unless a person has the chat)
   pushDmLater(p, to, data);                          // also to Jace, when both people use Jace (after answering)
   previewLater("messages", data.id, text, async () => {
     await notify([o?.inbox, p.inbox].filter(Boolean) as string[], "dm_update", { from: p.uuid, with: to, id: data.id, edited: true });

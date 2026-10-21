@@ -15,7 +15,7 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 
 1. **Supabase:** create a free project at <https://supabase.com>.
    - **Security options when creating the project:** Data API **on**, "Automatically expose new tables" **off**, automatic RLS **on**.
-   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle) and `supabase/007_jace_messages.sql` (syncing messages with Jace). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
+   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace) and `supabase/008_jace_bot.sql` (the official Jace bot). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
    - **Realtime → Settings:** make sure public channel access is allowed (it's the default).
    - **Project Settings → API Keys:** copy the project URL, the **publishable** key and the **secret** key.
 2. **Vercel:** New Project, then import `okjace/jace-social`.
@@ -29,6 +29,23 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
      `openssl rand -base64 32`) and `CRON_SECRET` (any long random text; also add it as the
      `CRON_SECRET` secret on GitHub, which runs the sync every 5 minutes).
    - Deploy.
+
+## The official Jace bot
+
+Owned by @okjace (set by `008_jace_bot.sql`); whoever is signed in as it (My bots → Switch to this
+bot) runs it. See `lib/jaceBot.ts`:
+
+- **Everyone can message it** without being friends, and it can message anyone. It's pinned in
+  everyone's Direct messages with an **OFFICIAL** tag.
+- **Answers:** it answers questions with AI (Claude Opus 5.5, from its Docs; needs `ANTHROPIC_API_KEY`).
+  "Talk to a person" hands the chat to the people signed in as the bot, who answer from the
+  **Jace inbox** in their sidebar.
+- **Announcements** (its Announcements tab) also go to everyone as a message. **Docs** are its help
+  articles; `008` adds starter ones.
+- **Welcome:** everyone gets one message from it - "Welcome to Jace Social! …" for new accounts, "This is
+  now the Jace bot! Ask me a question!" for accounts from before.
+- **Bans:** from someone's profile, the bot bans them from all of Jace Social (signed out, can't sign
+  in again), and, if wanted, their linked Jace account (Jace's `/api/oauth/moderation`).
 
 ## Jace messages
 
@@ -69,6 +86,11 @@ messages API; Jace's own site no longer shows them, so Jace Social is where they
 | GET | `me` | (Jace-linked people: also `jace_messages`, see `jace/messages`) |
 | GET, PATCH `{sync}`, DELETE | `jace/messages` | syncing with Jace messages: its state, the switch, disconnect |
 | POST | `jace/messages/sync` | "Sync now" |
+| GET, POST `{human}` | `jace-bot/thread` | your chat with the Jace bot: AI or a person |
+| GET; POST, DELETE (the bot) | `jace-bot/announcements` | its announcements (posting also messages everyone) |
+| GET; POST, PATCH, DELETE (the bot) | `jace-bot/docs` | its Docs |
+| GET (the bot) | `jace-bot/inbox` | everyone who wrote to it |
+| POST, DELETE (the bot) | `jace-bot/ban` | ban / unban from Jace Social (and Jace) |
 | GET | `friends` | friends with status and unread counts, plus incoming and outgoing requests |
 | POST | `friends` `{name}` | send a request (works even if they haven't signed up yet) |
 | DELETE | `friends?uuid=` | remove a friend or cancel/decline a request |

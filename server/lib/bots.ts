@@ -13,16 +13,19 @@ import { channelFor, postMessage, profilesById, type Channel } from "./chat";
 import { has, P, serverCtx } from "./perms";
 import { ApiError, db, inboxesOf, notify, publicProfile, siteUrl, token, type Profile } from "./server";
 
-export const JACE_BOT = "00000000000000000000000000000ace";
+import { JACE_BOT } from "./server";
+export { JACE_BOT };
 
 /** The official Jace bot's profile (made the first time it's needed). */
 export async function ensureJaceBot(): Promise<Profile> {
   const { data } = await db().from("profiles").select("*").eq("uuid", JACE_BOT).maybeSingle();
   if (data) return data as Profile;
+  // (its owner, @okjace, is set once by supabase/008_jace_bot.sql - never from a handle at runtime,
+  //  so nobody can become the official bot's owner by taking a handle)
   const { data: made, error } = await db().from("profiles").upsert({
     uuid: JACE_BOT, name: "Jace", inbox: token(), is_bot: true, bot_public: true, mc_linked: false,
     signed_up: new Date().toISOString(), avatar_url: `${siteUrl()}/jace-bot.png`,
-    bio: "The official Jace Social bot. Type / to see what I can do.", status: "online",
+    bio: "The official Jace Social bot. Ask me a question!", status: "online",
     last_seen: new Date(Date.now() + 100 * 365 * 86400_000).toISOString(),   // always shown online
   }).select("*").single();
   if (error) throw error;

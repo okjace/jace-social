@@ -57,6 +57,7 @@ export type Person = {
   bio: string | null; pronouns: string | null; accent_color: string | null; links: { label: string; url: string }[];
   unread?: number; role?: "owner" | "admin" | "member";
   banner_url?: string | null; is_bot?: boolean; bot_owner?: string | null;
+  official?: boolean; banned?: boolean;                    // the official Jace bot; banned from Jace Social
   // in a server's member list
   nickname?: string | null; roles?: string[]; joined_at?: string; timeout_until?: string | null;
 };
@@ -71,6 +72,7 @@ export type Me = Person & {
   realtime: { url: string; key: string }; settings: Settings; onboarded: boolean;
   handle_change_at?: string | null;      // when the handle can change again (null: now)
   jace_messages?: JaceMessages | null;   // Jace-linked people: syncing with their Jace messages
+  jace_staff?: boolean;                  // runs the official Jace bot (signed in as it, or its owner)
 };
 /** GET /jace/messages: syncing direct messages and group chats with Jace's (server/lib/jaceSync.ts). */
 export type JaceMessages = {

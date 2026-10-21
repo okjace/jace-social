@@ -183,6 +183,32 @@ GET: preview the server an invite is for (works signed out too, for invite pages
 POST: join it. The code can be a server's invite code or its custom link (vanity).
 methods: GET methods: POST 
 
+## /api/v1/jace-bot/thread
+Your chat with the official Jace bot (lib/jaceBot.ts).
+GET: {mode: "ai" | "human"} - who answers: the AI, or a person from Jace
+POST {human: boolean}: "Talk to a person" (true) or "Back to the AI" (false)
+methods: GET methods: POST
+
+## /api/v1/jace-bot/announcements
+GET: everyone - newest first (50)
+POST {body}: (the Jace bot) post one: it's in the Announcements tab, and goes to everyone as a message
+DELETE ?id=: (the Jace bot) remove one from the tab (messages already sent stay)
+methods: GET methods: POST methods: DELETE
+
+## /api/v1/jace-bot/docs
+GET: everyone - the Jace bot's Docs. POST {title, body}, PATCH {id, title?, body?, position?},
+DELETE ?id=: (the Jace bot) manage them
+methods: GET methods: POST methods: PATCH methods: DELETE
+
+## /api/v1/jace-bot/inbox
+GET: (the Jace bot, or its owner) everyone with a chat with it, people who asked for a person first
+methods: GET
+
+## /api/v1/jace-bot/ban
+POST {uuid, reason?, jace?}: (the Jace bot) ban from all of Jace Social; jace: also their Jace account
+DELETE ?uuid=&jace=1: unban
+methods: POST methods: DELETE
+
 ## /api/v1/jace/cron
 GET: the Jace message sync's regular run (every 5 minutes): resend queued messages, pull new Jace
 messages for everyone connected. Only with Authorization: Bearer <CRON_SECRET>.
@@ -256,7 +282,8 @@ methods: POST
 ## /api/v1/messages
 GET ?with=<uuid>&before=<id>: chat history with a friend (newest 50, oldest first), with reactions
   and the messages replied to
-POST {to, body, reply_to?, attachments?}: send a message to a friend
+POST {to, body, reply_to?, attachments?}: send a message to a friend (anyone can message the official
+  Jace bot, and it can message anyone)
 methods: GET methods: POST 
 
 ## /api/v1/messages/typing
