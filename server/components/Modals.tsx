@@ -214,6 +214,7 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
                   <button className="btn small" onClick={async () => { await api("/me/avatar", { method: "DELETE" }); onSaved(await api<Me>("/me")); }}>Remove picture</button>
                 )}
               </div>
+              <span className="muted small grow">Animated GIF and WebP pictures and banners work too (up to 4 MB).</span>
             </div>
             <label>Display name<input value={f.display_name} maxLength={32} placeholder={me.minecraft_name ?? me.jace_name ?? ""}
               onChange={(e) => setF({ ...f, display_name: e.target.value })} /></label>

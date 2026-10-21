@@ -1,4 +1,4 @@
-// POST (body = the image, Content-Type image/png|jpeg|gif|webp, up to 2 MB): new profile picture
+// POST (body = the image, Content-Type image/png|jpeg|gif|webp - animated too -, up to 4 MB): new profile picture
 // DELETE: back to your Minecraft head (or initials)
 import { db, friendsOf, handler, me, notify } from "@/lib/server";
 import { uploadImage } from "@/lib/images";

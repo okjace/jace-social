@@ -128,7 +128,7 @@ export default async function Home() {
       <footer>
         <div className="wrap">
           <span>Jace Social · made by jace.deb</span>
-          <span><a href={`https://github.com/${REPO}`}>GitHub</a> · <a href="https://okjace.github.io/jace-launcher/">Jace Launcher</a> · <a href="https://jace-store-deb.vercel.app">Jace Store</a> · <a href="/privacy">Privacy</a></span>
+          <span><a href={`https://github.com/${REPO}`}>GitHub</a> · <a href="https://okjace.github.io/jace-launcher/">Jace Launcher</a> · <a href="https://jace-store-deb.vercel.app">Jace Store</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span>
         </div>
       </footer>
     </div>

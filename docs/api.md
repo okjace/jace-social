@@ -248,7 +248,7 @@ already uses Jace Social, the two accounts become one, keeping friends and chats
 methods: POST 
 
 ## /api/v1/me/avatar
-POST (body = the image, Content-Type image/png|jpeg|gif|webp, up to 2 MB): new profile picture
+POST (body = the image, Content-Type image/png|jpeg|gif|webp - animated too -, up to 4 MB): new profile picture
 DELETE: back to your Minecraft head (or initials)
 methods: POST methods: DELETE 
 

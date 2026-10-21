@@ -78,7 +78,8 @@ html[data-bgimage="1"] .rail { background: color-mix(in srgb, var(--bg) var(--pa
 html[data-bgimage="1"] .sidebar { background: color-mix(in srgb, var(--bg2) var(--panel-alpha), transparent); }
 html[data-bgimage="1"] .main { background: color-mix(in srgb, var(--panel) var(--panel-alpha), transparent); }
 html[data-bgimage="1"] .right { background: color-mix(in srgb, var(--bg2) var(--panel-alpha), transparent); }
-html[data-bgimage="1"] :is(.me-panel, .voice-bar) { background: color-mix(in srgb, var(--me-bg) var(--panel-alpha), transparent); }
+/* your card in the corner: the same see-through as the sidebar, so the background shows through it too */
+html[data-bgimage="1"] :is(.me-panel, .voice-bar) { background: color-mix(in srgb, var(--bg2) var(--panel-alpha), transparent); border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
 html[data-bgimage="1"] .app { background: var(--bg-image) center / cover no-repeat, var(--bg); }
 .bg-preview { height: 90px; border-radius: 10px; background: var(--panel2) center / cover no-repeat; display: flex; align-items: flex-end;
   justify-content: flex-end; gap: 6px; padding: 8px; }
@@ -500,3 +501,15 @@ select.btn { width: auto; }
 .jace-pane .card { display: grid; gap: 6px; }
 .doc-link { text-align: left; cursor: pointer; border: 1px solid var(--line); color: var(--text); font: inherit; }
 .doc-link:hover { border-color: var(--green); }
+
+/* Terms and privacy popup (components/Legal.tsx) */
+.modal:has(> .legal) { display: flex; flex-direction: column; overflow: hidden; }
+.legal { display: flex; flex-direction: column; min-height: 0; max-height: 90vh; text-align: left; }
+.legal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 8px; }
+.legal-tabs { display: flex; gap: 6px; padding: 0 20px 10px; overflow-x: auto; border-bottom: 1px solid var(--line); flex: none; }
+.legal-tabs .tab { white-space: nowrap; }
+.legal-body { overflow-y: auto; padding: 4px 20px 16px; line-height: 1.55; min-height: 120px; }
+.legal .modal-foot { align-items: center; flex-wrap: wrap; flex: none; }
+.legal-page h1 { margin-top: 0; }
+.legal-body, .legal-page, .jace-pane .card { white-space: pre-wrap; overflow-wrap: anywhere; }
+.legal-body .md-h, .legal-page .md-h { margin: 14px 0 0; }
