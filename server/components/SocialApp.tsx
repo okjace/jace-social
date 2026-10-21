@@ -408,9 +408,12 @@ function Main({ me, setMe, signOut, inviteCode }: {
     <div className={`app${showRight ? "" : " no-right"}${mobileMain ? " show-main" : ""}`}>
       {/* server rail */}
       <nav className="rail" aria-label="Servers">
-        <button className={`rail-item${view.kind !== "server" ? " active" : ""}`} title="Home"
+        <button className={`rail-item rail-home${view.kind !== "server" ? " active" : ""}`} title="Home"
           onClick={() => { setView({ kind: "home" }); setMobileMain(false); }}>
-          <img className="rail-logo" src="/logo.png" alt="Jace Social" />
+          <svg className="rail-logo" viewBox="0 0 48 48" aria-label="Jace Social">   {/* the logo, in your accent color */}
+            <path d="M16 12h16a6 6 0 0 1 6 6v8a6 6 0 0 1-6 6H22l-8.5 7 1.4-7.1A6 6 0 0 1 10 26v-8a6 6 0 0 1 6-6z" fill="#111317" />
+            {[18, 24, 30].map((x) => <circle key={x} cx={x} cy={22} r={2.3} fill="var(--green)" />)}
+          </svg>
           {friends.incoming.length > 0 && <span className="badge">{friends.incoming.length}</span>}
         </button>
         <div className="rail-sep" />

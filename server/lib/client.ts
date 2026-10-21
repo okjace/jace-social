@@ -66,6 +66,7 @@ export type Settings = {
   compact?: boolean; reduce_motion?: boolean; show_embeds?: boolean; show_avatars?: boolean; sounds?: boolean;
   desktop_notifications?: boolean; notify?: "all" | "mentions" | "none"; link_warning?: boolean;
   trusted_domains?: string[]; muted?: string[]; time_format?: "12h" | "24h"; send_on_enter?: boolean; developer?: boolean;
+  background?: string | null; background_opacity?: number; custom_css?: string;   // Settings -> Appearance
 };
 export type Me = Person & {
   display_name: string | null; minecraft_linked: boolean; jace_linked: boolean; inbox: string;

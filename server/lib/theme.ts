@@ -55,11 +55,30 @@ export function applySettings(s: Settings) {
   } else {
     for (const k of ["--green", "--accent-hover", "--on-accent"]) root.style.removeProperty(k);
   }
+  // Background picture: the panels go see-through (background_opacity is how solid they stay)
+  if (s.background) {
+    root.style.setProperty("--bg-image", `url("${s.background.replace(/["\\]/g, "")}")`);
+    root.style.setProperty("--panel-alpha", `${Math.round(Math.max(0.2, Math.min(1, s.background_opacity ?? 0.8)) * 100)}%`);
+    root.dataset.bgimage = "1";
+  } else {
+    root.style.removeProperty("--bg-image"); root.style.removeProperty("--panel-alpha"); root.dataset.bgimage = "";
+  }
+  applyCustomCss(s.custom_css ?? "");
   root.dataset.theme = theme;
   root.dataset.compact = s.compact ? "1" : "";
   root.dataset.motion = s.reduce_motion ? "reduce" : "";
   root.dataset.avatars = s.show_avatars === false ? "off" : "";
   document.body.style.zoom = String(Math.max(0.8, Math.min(1.4, s.font_scale ?? 1)));
+}
+
+/** Your custom CSS, after everything else. Open the app with ?nocss to start without it (if it hid something). */
+export const cssDisabled = () => typeof location !== "undefined" && new URLSearchParams(location.search).has("nocss");
+function applyCustomCss(css: string) {
+  let el = document.getElementById("custom-css") as HTMLStyleElement | null;
+  if (!css.trim() || cssDisabled()) { el?.remove(); return; }
+  if (!el) { el = document.createElement("style"); el.id = "custom-css"; document.head.appendChild(el); }
+  else document.head.appendChild(el);   // keep it last so it wins
+  if (el.textContent !== css) el.textContent = css;
 }
 
 export const THEME_NAMES: [NonNullable<Settings["theme"]>, string, string][] = [

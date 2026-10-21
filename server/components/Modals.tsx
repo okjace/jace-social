@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { MinecraftDevice } from "./MinecraftDevice";
 import { BotActivity, MyBots } from "./Bots";
 import { addAnotherAccount, forgetAccount, savedAccounts, switchAccount } from "@/lib/accounts";
-import { ACCENTS, applySettings, THEME_NAMES } from "@/lib/theme";
+import { ACCENTS, applySettings, cssDisabled, THEME_NAMES } from "@/lib/theme";
 import {
   api, desktopReady, getToken, inDesktop, since, statusLabel, type JaceMessages, type Me, type Person, type Settings, type Status, type DesktopBridge, type ServerDetail,
 } from "@/lib/client";
@@ -322,8 +322,11 @@ function AppearanceTab(props: SettingsProps) {
     <label>Accent color</label>
     <div className="swatches">
       {ACCENTS.map((c) => <button key={c} className={`swatch${(s.accent ?? "#3ddc84") === c ? " on" : ""}`} style={{ background: c }} onClick={() => void set({ accent: c })} />)}
-      <input type="color" value={s.accent ?? "#3ddc84"} onChange={(e) => void set({ accent: e.target.value })} style={{ width: 40, padding: 2 }} />
+      <input type="color" value={s.accent ?? "#3ddc84"} onChange={(e) => void set({ accent: e.target.value })} style={{ width: 40, padding: 2 }} title="Pick any color" />
+      <HexInput value={s.accent ?? "#3ddc84"} onChange={(v) => void set({ accent: v })} />
     </div>
+    <BackgroundPicker s={s} set={set} onError={props.onError} />
+    <CustomCss s={s} set={set} />
     <label>Text size: {Math.round((s.font_scale ?? 1) * 100)}%
       <input type="range" min={0.8} max={1.4} step={0.05} value={s.font_scale ?? 1} onChange={(e) => void set({ font_scale: Number(e.target.value) })} />
     </label>
@@ -333,6 +336,60 @@ function AppearanceTab(props: SettingsProps) {
     <Toggle label="Less motion" desc="Turn off animations" checked={!!s.reduce_motion} onChange={(v) => void set({ reduce_motion: v })} />
     <Toggle label="24-hour clock" checked={s.time_format === "24h"} onChange={(v) => void set({ time_format: v ? "24h" : "12h" })} />
     <Toggle label="Enter sends the message" desc="Off: Enter makes a new line, and you click Send" checked={s.send_on_enter !== false} onChange={(v) => void set({ send_on_enter: v })} />
+  </>;
+}
+
+/** A #rrggbb box: saves when it's a whole color. */
+function HexInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  const ok = /^#?[0-9a-fA-F]{6}$/.test(text.trim());
+  return <input value={text} maxLength={7} spellCheck={false} aria-label="Accent color (hex)" placeholder="#3ddc84"
+    style={{ width: 96, fontFamily: "ui-monospace, monospace", borderColor: ok ? undefined : "var(--red)" }}
+    onChange={(e) => {
+      setText(e.target.value);
+      const v = e.target.value.trim();
+      if (/^#?[0-9a-fA-F]{6}$/.test(v)) onChange((v.startsWith("#") ? v : `#${v}`).toLowerCase());
+    }} />;
+}
+
+function BackgroundPicker({ s, set, onError }: { s: Settings; set: (p: Settings) => Promise<void>; onError: (m: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  return <>
+    <label>Background</label>
+    <div className="bg-preview" style={s.background ? { backgroundImage: `url("${s.background}")` } : undefined}>
+      {!s.background && <span className="muted small" style={{ marginRight: "auto" }}>No background picture</span>}
+      <label className="btn small" style={{ margin: 0 }}>{busy ? "Uploading…" : s.background ? "Change" : "Choose a picture"}
+        <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden disabled={busy} onChange={async (e) => {
+          const file = e.target.files?.[0]; e.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          try { await set({ background: (await api<{ url: string }>("/me/background", { raw: file })).url }); }
+          catch (err) { onError((err as Error).message); } finally { setBusy(false); }
+        }} /></label>
+      {s.background && <button className="btn small" onClick={() => void set({ background: null })}>Remove</button>}
+    </div>
+    {s.background && <label>Panels: {Math.round((s.background_opacity ?? 0.8) * 100)}% solid
+      <input type="range" min={0.2} max={1} step={0.05} value={s.background_opacity ?? 0.8}
+        onChange={(e) => void set({ background_opacity: Number(e.target.value) })} />
+    </label>}
+  </>;
+}
+
+function CustomCss({ s, set }: { s: Settings; set: (p: Settings) => Promise<void> }) {
+  const [css, setCss] = useState(s.custom_css ?? "");
+  const changed = css !== (s.custom_css ?? "");
+  return <>
+    <label>Custom CSS
+      <textarea className="css-editor" value={css} maxLength={20000} spellCheck={false} placeholder={".main { border-radius: 16px; }\n:root { --panel: #1a1b2e; }"}
+        onChange={(e) => setCss(e.target.value)} />
+    </label>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <button className="btn primary small" disabled={!changed} onClick={() => void set({ custom_css: css })}>Save CSS</button>
+      {(s.custom_css ?? "") && <button className="btn small" onClick={() => { setCss(""); void set({ custom_css: "" }); }}>Turn off</button>}
+      <span className="muted small grow">Only changes how Jace Social looks for you. Don&apos;t paste CSS from people you don&apos;t trust.
+        {cssDisabled() ? " Custom CSS is off for this visit (?nocss)." : " If it hides something, open the app with ?nocss at the end of the address."}</span>
+    </div>
   </>;
 }
 

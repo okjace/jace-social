@@ -42,6 +42,11 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   time_format: (v) => (["12h", "24h"].includes(String(v)) ? v : "12h"),
   send_on_enter: (v) => v !== false,
   developer: (v) => Boolean(v),
+  // Appearance: a background picture (only one uploaded to /me/background), how solid the panels
+  // stay over it, and your own CSS (applied only in your own app)
+  background: (v) => (typeof v === "string" && v.startsWith(`${supabaseUrl()}/storage/v1/object/public/avatars/backgrounds/`) ? v : null),
+  background_opacity: (v) => Math.max(0.2, Math.min(1, Number(v) || 0.8)),
+  custom_css: (v) => String(v ?? "").slice(0, 20_000),
 };
 
 export const GET = handler(async (req) => {
@@ -103,7 +108,7 @@ export const PATCH = handler(async (req) => {
     const incoming = (b.settings ?? {}) as Record<string, unknown>;
     const merged: Record<string, unknown> = { ...(p.settings ?? {}) };
     for (const [k, v] of Object.entries(incoming)) if (SETTINGS[k]) merged[k] = SETTINGS[k](v);
-    if (JSON.stringify(merged).length > 16_000) throw new ApiError(400, "Too many settings");
+    if (JSON.stringify(merged).length > 40_000) throw new ApiError(400, "Too many settings");
     patch.settings = merged;
   }
   if (b.onboarded === true) patch.onboarded_at = p.onboarded_at ?? new Date().toISOString();

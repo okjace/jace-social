@@ -252,6 +252,11 @@ POST (body = the image, Content-Type image/png|jpeg|gif|webp, up to 2 MB): new p
 DELETE: back to your Minecraft head (or initials)
 methods: POST methods: DELETE 
 
+## /api/v1/me/background
+POST (image body): upload a background picture for Settings -> Appearance. It's used once you
+save it in your settings (PATCH /me {settings: {background: url}}).
+methods: POST 
+
 ## /api/v1/me/banner
 POST (image body): set your profile banner; DELETE: remove it
 methods: POST methods: DELETE 

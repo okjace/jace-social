@@ -71,7 +71,18 @@ textarea { resize: vertical; }
   display: grid; place-items: center; font-weight: 800; color: var(--text); transition: border-radius .15s, background .15s;
   overflow: hidden; flex: none; }
 .rail-item:hover, .rail-item.active { border-radius: 15px; background: var(--green); color: var(--on-accent); }
-.rail-logo { width: 100%; height: 100%; object-fit: cover; transform: scale(1.07); }   /* logo.png has a small clear edge */
+.rail-home { background: var(--green); }
+.rail-logo { width: 100%; height: 100%; }
+/* Settings -> Appearance -> Background: your picture behind see-through panels */
+html[data-bgimage="1"] .rail { background: color-mix(in srgb, var(--bg) var(--panel-alpha), transparent); }
+html[data-bgimage="1"] .sidebar { background: color-mix(in srgb, var(--bg2) var(--panel-alpha), transparent); }
+html[data-bgimage="1"] .main { background: color-mix(in srgb, var(--panel) var(--panel-alpha), transparent); }
+html[data-bgimage="1"] .right { background: color-mix(in srgb, var(--bg2) var(--panel-alpha), transparent); }
+html[data-bgimage="1"] :is(.me-panel, .voice-bar) { background: color-mix(in srgb, var(--me-bg) var(--panel-alpha), transparent); }
+html[data-bgimage="1"] .app { background: var(--bg-image) center / cover no-repeat, var(--bg); }
+.bg-preview { height: 90px; border-radius: 10px; background: var(--panel2) center / cover no-repeat; display: flex; align-items: flex-end;
+  justify-content: flex-end; gap: 6px; padding: 8px; }
+.css-editor { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 13px; min-height: 160px; }
 .rail-item img { width: 100%; height: 100%; object-fit: cover; }
 .rail-item .badge { position: absolute; right: -2px; bottom: -2px; }
 .rail-sep { width: 32px; height: 2px; background: var(--line); border-radius: 1px; flex: none; }
