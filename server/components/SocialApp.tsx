@@ -563,8 +563,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
           <div className="main-head">
             <button className="icon-btn mobile-only" onClick={() => setMobileMain(false)}>←</button>
             <Avatar p={dmPerson} size={26} status={dmPerson.status} /><span className="title">{dmPerson.name} <BotTag p={dmPerson} /></span>
-            <span className="topic">{shortLine(dmPerson)}</span>
-            {Calls.supported() && <button className="icon-btn" title={`Voice call ${dmPerson.name}`} aria-label="Start a voice call"
+            <span className="topic">{dmPerson.official ? "The official Jace Social bot" : shortLine(dmPerson)}</span>
+            {Calls.supported() && !dmPerson.is_bot && <button className="icon-btn" title={`Voice call ${dmPerson.name}`} aria-label="Start a voice call"
               disabled={call.state !== "idle"} onClick={() => void calls.call(dmPerson.uuid, dmPerson.name)}>📞</button>}
             <button className="icon-btn" title={muted.includes(dmPerson.uuid) ? "Unmute" : "Mute"} onClick={() => void toggleMute(dmPerson.uuid)}>{muted.includes(dmPerson.uuid) ? "🔕" : "🔔"}</button>
           </div>

@@ -71,7 +71,9 @@ await until("an answer", async () => (await chatWithBot(alice.token)).length >= 
 const answer = (await chatWithBot(alice.token)).at(-1);
 assert.equal(answer.sender, JACE_BOT);
 console.log("  answer:", answer.body.slice(0, 80));
-const notFriends = await api(alice.token, "/messages", { body: { to: bob.uuid, body: "hi" }, allowError: true });
+// (alice and bob talk on the mock Jace, so the Jace sync made them friends; carol isn't alice's friend)
+const [carol] = await sb("profiles?jace_name=eq.carol&select=uuid");
+const notFriends = await api(alice.token, "/messages", { body: { to: carol.uuid, body: "hi" }, allowError: true });
 assert.equal(notFriends.status, 403, "other people still need to be friends");
 
 step("Talk to a person: the AI stops, the bot's inbox shows it");

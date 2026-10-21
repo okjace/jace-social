@@ -12,6 +12,7 @@ import { after } from "next/server";
 import { JACE } from "./jace";
 import { DM_MAX, splitBody } from "./jaceSyncCore";
 import { ApiError, db, inboxesOf, JACE_BOT, notify, type Profile } from "./server";
+import { ensureJaceBot } from "./bots";
 
 export const WELCOME_NEW = "Welcome to Jace Social! Add your friends and make Jace Social feel like home!";
 export const WELCOME_EXISTING = "This is now the Jace bot! Ask me a question!";
@@ -33,6 +34,7 @@ export async function requireJaceStaff(p: Profile) {
 
 /** Messages from the Jace bot (split to fit), with the usual live notification. -> their ids */
 export async function botSay(to: { uuid: string; inbox: string }, body: string): Promise<number[]> {
+  await ensureJaceBot();                             // made the first time it's needed
   const { data, error } = await db().from("messages")
     .insert(splitBody(body, DM_MAX).map((part) => ({ sender: JACE_BOT, recipient: to.uuid, body: part }))).select("id");
   if (error) throw error;
