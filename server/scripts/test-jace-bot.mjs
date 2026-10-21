@@ -2,8 +2,8 @@
 // Same setup as scripts/test-jace-sync.mjs (TEST Supabase project with supabase/*.sql up to 008,
 // scripts/reset-test-db.sh, a fresh mock-jace.mjs, `npm run dev`), then:
 //   CRON_SECRET=test-cron node scripts/test-jace-bot.mjs
-// Without ANTHROPIC_API_KEY the bot's AI answer is its "talk to a person" message (checked here);
-// real AI answers aren't tested (they cost money).
+// Without CLOUDFLARE_* settings the bot answers with the best-matching Doc (checked here); real
+// Workers AI answers aren't tested (they need a Cloudflare account).
 import assert from "node:assert/strict";
 
 const BASE = process.env.BASE || "http://localhost:3000";
@@ -71,6 +71,9 @@ await until("an answer", async () => (await chatWithBot(alice.token)).length >= 
 const answer = (await chatWithBot(alice.token)).at(-1);
 assert.equal(answer.sender, JACE_BOT);
 console.log("  answer:", answer.body.slice(0, 80));
+if (!process.env.CLOUDFLARE_AI_TOKEN) assert.match(answer.body, /Friends and your @handle/, "the best-matching Doc");
+await api(alice.token, "/messages", { body: { to: JACE_BOT, body: "zzqx blorp" } });
+await until("the not-sure answer", async () => /not sure/.test((await chatWithBot(alice.token)).at(-1).body));
 // (alice and bob talk on the mock Jace, so the Jace sync made them friends; carol isn't alice's friend)
 const [carol] = await sb("profiles?jace_name=eq.carol&select=uuid");
 const notFriends = await api(alice.token, "/messages", { body: { to: carol.uuid, body: "hi" }, allowError: true });

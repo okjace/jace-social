@@ -35,8 +35,8 @@ export default function Privacy() {
           Conversations with Minecraft-only players are never sent to Jace.</p>
 
         <h2>The Jace bot</h2>
-        <p>The official Jace bot answers questions with AI: your chat with it (the latest messages) is sent to Anthropic's Claude to write
-          its answer, and isn't used to train it. Press <b>Talk to a person</b> and the people running the Jace bot answer instead -
+        <p>The official Jace bot answers questions with AI: your chat with it (the latest messages) is sent to Cloudflare Workers AI to write
+          its answer. Cloudflare doesn't use it to train AI models or improve its services. Press <b>Talk to a person</b> and the people running the Jace bot answer instead -
           they can read your chat with it. The Jace bot also sends announcements to everyone.</p>
 
         <h2>Who sees what</h2>

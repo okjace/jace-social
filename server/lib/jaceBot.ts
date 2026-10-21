@@ -1,13 +1,13 @@
 // The official Jace bot (its slash commands are in lib/bots.ts). It's owned by @okjace, and whoever
 // is signed in as it (My bots -> Switch to this bot) runs it:
 //   - anyone can message it without being friends, and it can message anyone
-//   - it answers questions with AI (Claude, from the Docs), until someone asks for a person:
+//   - it answers questions with AI (Cloudflare Workers AI, from the Docs; the best-matching Doc
+//     without it), until someone asks for a person:
 //     then the people signed in as the bot answer from its inbox
 //   - Announcements go in its Announcements tab and to everyone as a message
 //   - Docs are its help articles (and what the AI knows)
 //   - it can ban people from Jace Social, and their linked Jace account too
 //   - everyone gets one message from it: a welcome for new accounts, an introduction for others
-import Anthropic from "@anthropic-ai/sdk";
 import { after } from "next/server";
 import { JACE } from "./jace";
 import { DM_MAX, splitBody } from "./jaceSyncCore";
@@ -18,7 +18,6 @@ export const WELCOME_NEW = "Welcome to Jace Social! Add your friends and make Ja
 export const WELCOME_EXISTING = "This is now the Jace bot! Ask me a question!";
 const TO_PERSON = "OK! A person from Jace will answer here soon.";
 const TO_AI = "You're talking to the Jace AI again. Ask me a question!";
-const NO_AI = "I can't answer by myself right now. Press **Talk to a person** and someone from Jace will reply here.";
 const AI_LIMIT_PER_HOUR = 30;
 
 /** People who run the Jace bot: anyone signed in as it, and its owner. */
@@ -85,10 +84,14 @@ export function answerLater(p: Profile) {
   });
 }
 
-let client: Anthropic | null = null;
+type Doc = { title: string; body: string };
+
+/** Cloudflare Workers AI (Cloudflare doesn't train on what's sent to it; the free tier is 10,000
+ *  Neurons a day). CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AI_TOKEN; JACE_AI_MODEL picks the model. */
+const AI_MODEL = () => process.env.JACE_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct-fp8-fast";
+const aiConfigured = () => !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_AI_TOKEN);
 
 async function aiAnswer(p: Profile) {
-  if (!process.env.ANTHROPIC_API_KEY) { await botSay(p, NO_AI); return; }
   const hourAgo = new Date(Date.now() - 3600_000).toISOString();
   const { count } = await db().from("messages").select("id", { count: "exact", head: true })
     .eq("sender", p.uuid).eq("recipient", JACE_BOT).gt("created_at", hourAgo);
@@ -102,13 +105,13 @@ async function aiAnswer(p: Profile) {
     db().from("jace_bot_docs").select("title, body").order("position").order("title"),
     db().from("messages").select("sender, body, created_at, id")
       .or(`and(sender.eq.${p.uuid},recipient.eq.${JACE_BOT}),and(sender.eq.${JACE_BOT},recipient.eq.${p.uuid})`)
-      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(30),
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(20),
   ]);
   // the conversation, oldest first, as alternating turns starting with theirs
-  const turns: Anthropic.MessageParam[] = [];
+  const turns: { role: "user" | "assistant"; content: string }[] = [];
   for (const m of (history ?? []).reverse()) {
     const role = m.sender === JACE_BOT ? "assistant" : "user";
-    const text = String(m.body ?? "").trim();
+    const text = String(m.body ?? "").trim().slice(0, 2000);
     if (!text) continue;
     const last = turns[turns.length - 1];
     if (last && last.role === role) last.content = `${last.content}\n\n${text}`;
@@ -116,35 +119,61 @@ async function aiAnswer(p: Profile) {
   }
   while (turns.length && turns[0].role !== "user") turns.shift();
   if (!turns.length || turns[turns.length - 1].role !== "user") return;     // nothing new to answer
+  const question = turns[turns.length - 1].content;
 
+  let reply = aiConfigured() ? await askCloudflare(p, (docs ?? []) as Doc[], turns) : null;
+  if (!reply) reply = bestDoc(question, (docs ?? []) as Doc[]);           // no AI, over today's limit, or down
+  await botSay(p, reply);
+}
+
+async function askCloudflare(p: Profile, docs: Doc[], turns: { role: string; content: string }[]): Promise<string | null> {
   const system = `You are Jace, the official bot of Jace Social: a place for friends, chats, servers and voice, with Minecraft built in (web, desktop, phones, Jace Launcher and a Minecraft mod).
-You're chatting with ${p.display_name || p.name} in their direct messages with you. Answer questions about Jace Social briefly and kindly, like a helpful friend - a few sentences, plain language, light Markdown at most.
-Use the Docs below as your source. If they don't cover something, say you're not sure rather than guessing, and suggest pressing "Talk to a person" so someone from Jace can help. For problems with someone's account, bans, reports or anything you can't do from a chat, also suggest "Talk to a person".
+You're chatting with ${p.display_name || p.name} in their direct messages with you. Answer questions about Jace Social briefly and kindly, like a helpful friend: a few sentences, plain language.
+Use only the Docs below. If they don't cover something, say you're not sure rather than guessing, and suggest pressing "Talk to a person" so someone from Jace can help. For problems with someone's account, bans or reports, also suggest "Talk to a person".
 
 # Docs
-${(docs ?? []).map((d) => `## ${d.title}\n${d.body}`).join("\n\n")}`;
-
-  client ??= new Anthropic();
-  let reply = "";
+${docs.map((d) => `## ${d.title}\n${d.body}`).join("\n\n")}`;
   try {
-    const response = await client.beta.messages.create({
-      model: "claude-opus-5-5",
-      max_tokens: 2000,
-      output_config: { effort: "low" },          // short chat answers
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",                      // a declined request is answered by the fallback model
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],   // the Docs are the same for everyone
-      messages: turns,
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/${AI_MODEL()}`, {
+      method: "POST", signal: AbortSignal.timeout(25_000),
+      headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_AI_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "system", content: system }, ...turns], max_tokens: 600, max_completion_tokens: 600 }),
     });
-    if (response.stop_reason === "refusal") reply = "I can't help with that one here. Press **Talk to a person** if you need someone from Jace.";
-    else reply = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("").trim();
+    const d = await r.json().catch(() => ({})) as {
+      success?: boolean; errors?: { message?: string }[];
+      result?: { response?: string; choices?: { message?: { content?: string } }[] };
+    };
+    if (!r.ok || d.success === false) {
+      console.error("jace ai", r.status, d.errors?.map((e) => e.message).join("; "));   // e.g. over the free daily Neurons
+      return null;
+    }
+    const text = d.result?.response ?? d.result?.choices?.[0]?.message?.content ?? "";
+    return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim() || null;      // models that think out loud
   } catch (e) {
-    if (e instanceof Anthropic.RateLimitError) reply = "I'm a bit busy right now - ask me again in a minute, or press **Talk to a person**.";
-    else if (e instanceof Anthropic.APIError) { console.error("jace ai", e.status, e.message); reply = NO_AI; }
-    else throw e;
+    console.error("jace ai", e);
+    return null;
   }
-  await botSay(p, reply || NO_AI);
 }
+
+/** Without AI: the Doc whose words best match the question, or "talk to a person". */
+export function bestDoc(question: string, docs: Doc[]): string {
+  const words = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9 ]+/g, " ").split(/\s+/)
+    .filter((w) => w.length > 2 && !STOP.has(w)).map((w) => w.replace(/(ing|ed|es|s)$/, ""));
+  const q = new Set(words(question));
+  if (!q.size) return NO_MATCH;
+  let best: { doc: Doc; score: number } | null = null;
+  for (const doc of docs) {
+    const title = new Set(words(doc.title)), body = words(doc.body);
+    let score = 0;
+    for (const w of q) score += (title.has(w) ? 3 : 0) + Math.min(3, body.filter((b) => b === w).length);
+    if (!best || score > best.score) best = { doc, score };
+  }
+  if (!best || best.score < 2) return NO_MATCH;
+  return `This might help - **${best.doc.title}**:\n\n${best.doc.body.trim()}`.slice(0, 1990);
+}
+const NO_MATCH = "I'm not sure about that one. Have a look in the **Docs** tab, or press **Talk to a person** and someone from Jace will reply here.";
+const STOP = new Set(["the", "and", "how", "what", "can", "you", "your", "for", "are", "does", "with", "this", "that", "who", "why",
+  "where", "when", "which", "there", "their", "about", "have", "has", "get", "make", "want", "jace", "social", "please", "help"]);
 
 // --- the people running it: their inbox -------------------------------------------------------------
 

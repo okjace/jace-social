@@ -37,7 +37,9 @@ bot) runs it. See `lib/jaceBot.ts`:
 
 - **Everyone can message it** without being friends, and it can message anyone. It's pinned in
   everyone's Direct messages with an **OFFICIAL** tag.
-- **Answers:** it answers questions with AI (Claude Opus 5.5, from its Docs; needs `ANTHROPIC_API_KEY`).
+- **Answers:** it answers questions with AI from its Docs: Cloudflare Workers AI (free up to 10,000
+  Neurons a day, and Cloudflare doesn't train on it; `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN`).
+  Without it, or over the day's limit, it answers with the best-matching Doc.
   "Talk to a person" hands the chat to the people signed in as the bot, who answer from the
   **Jace inbox** in their sidebar.
 - **Announcements** (its Announcements tab) also go to everyone as a message. **Docs** are its help
