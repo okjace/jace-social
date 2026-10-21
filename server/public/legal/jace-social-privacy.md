@@ -30,6 +30,12 @@ To stop it: **Settings → Accounts → Jace messages**. Turn off **Sync message
 
 The official Jace bot answers questions with AI: your chat with it (the latest messages) is sent to Cloudflare Workers AI to write its answer. Cloudflare doesn't use it to train AI models or improve its services. Press **Talk to a person** and the people running the Jace bot answer instead - they can read your chat with it. The Jace bot also sends announcements to everyone.
 
+## Deleting your account
+
+Ask the Jace bot to "delete my account". You sign in again to show it's you, and confirm. Your account then disappears for everyone, and you're signed out everywhere. Your Jace messages connection (its token) is deleted at once.
+
+For **10 days** we keep everything set aside, so your **recovery ID** can bring it back. After 10 days your account and everything in it - profile, friends, messages, servers you own, settings - is deleted for good. Files you uploaded may stay in storage a little longer before they're cleaned up.
+
 ## Bans
 
 If you're banned from Jace Social, we keep the ban and its reason so you can't sign in again. If your account is linked to Jace, the ban can also be applied to your Jace account.

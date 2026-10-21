@@ -36,6 +36,7 @@ export type Profile = {
   bot_enabled?: boolean; banner_url?: string | null; settings?: Record<string, unknown>; onboarded_at?: string | null;
   handle?: string | null; handle_changed_at?: string | null;
   banned_at?: string | null; ban_reason?: string | null; jace_welcome?: string | null;
+  deleted_at?: string | null;                     // set aside for 10 days (lib/accountDeletion.ts)
 };
 
 /** The official Jace bot's player id (lib/bots.ts, lib/jaceBot.ts). */
@@ -167,6 +168,7 @@ export function avatarFor(p: Pick<Profile, "uuid" | "avatar_url" | "mc_linked">)
  * and their last-seen time is hidden.
  */
 export function publicProfile(p: Profile) {
+  if (p.deleted_at) return deletedProfile(p.uuid);
   const invisible = p.status === "invisible";
   const online = isOnline(p) && !invisible;
   return {
@@ -181,6 +183,16 @@ export function publicProfile(p: Profile) {
     bio: p.bio ?? null, pronouns: p.pronouns ?? null, accent_color: p.accent_color ?? null, links: p.links ?? [],
     banner_url: p.banner_url ?? null, is_bot: !!p.is_bot, bot_owner: p.is_bot ? p.bot_owner ?? null : null,
     official: p.uuid === JACE_BOT, banned: !!p.banned_at,
+  };
+}
+
+/** How a deleted account looks to everyone else (its messages stay until it's gone for good). */
+function deletedProfile(uuid: string) {
+  return {
+    uuid, name: "Deleted account", online: false, uses_jace: false, activity: null, last_seen: null, status: "offline",
+    custom_status: null, status_emoji: null, minecraft_name: null, jace_name: null, handle: null, avatar_url: null, bio: null,
+    pronouns: null, accent_color: null, links: [], banner_url: null, is_bot: false, bot_owner: null, official: false, banned: false,
+    deleted: true,
   };
 }
 
@@ -206,7 +218,7 @@ export async function profileByHandle(raw: string): Promise<Profile | null> {
   if (!HANDLE_RE.test(h)) return null;
   const { data, error } = await db().from("profiles").select("*").eq("handle", h).limit(1).maybeSingle();
   if (error) return null;                          // before 006_handles.sql: no handles yet
-  return data as Profile | null;
+  return data?.deleted_at ? null : data as Profile | null;
 }
 
 /** A new random player id for Jace-only accounts (same shape as a Minecraft UUID). */
@@ -218,13 +230,15 @@ export async function friendsOf(uuid: string): Promise<Profile[]> {
     .select("requester, addressee, a:profiles!friendships_requester_fkey(*), b:profiles!friendships_addressee_fkey(*)")
     .eq("status", "accepted").or(`requester.eq.${uuid},addressee.eq.${uuid}`);
   if (error) throw error;
-  return (data ?? []).map((r) => (r.requester === uuid ? r.b : r.a) as unknown as Profile);
+  return (data ?? []).map((r) => (r.requester === uuid ? r.b : r.a) as unknown as Profile).filter((f) => !f.deleted_at);
 }
 
 export async function areFriends(a: string, b: string): Promise<boolean> {
-  const { data } = await db().from("friendships").select("status")
+  const { data } = await db().from("friendships")
+    .select("status, a:profiles!friendships_requester_fkey(*), b:profiles!friendships_addressee_fkey(*)")   // (*): works before 010 too
     .or(`and(requester.eq.${a},addressee.eq.${b}),and(requester.eq.${b},addressee.eq.${a})`).maybeSingle();
-  return data?.status === "accepted";
+  const gone = (x: unknown) => !!(x as { deleted_at?: string | null } | null)?.deleted_at;
+  return data?.status === "accepted" && !gone(data.a) && !gone(data.b);     // not with a deleted account
 }
 
 /** Inboxes (live-notification channels) of these players. */

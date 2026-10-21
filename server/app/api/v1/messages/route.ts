@@ -63,7 +63,7 @@ export const POST = handler(async (req) => {
   if (error) throw error;
   const { data: o } = await db().from("profiles").select("inbox").eq("uuid", to).single();
   if (o) await notify([o.inbox], "message", { from: p.uuid, name: p.name, id: data.id });
-  if (to === JACE_BOT) answerLater(p);               // the Jace bot answers (AI, unless a person has the chat)
+  if (to === JACE_BOT) answerLater(p, text);               // the Jace bot answers (AI, unless a person has the chat)
   pushDmLater(p, to, data);                          // also to Jace, when both people use Jace (after answering)
   previewLater("messages", data.id, text, async () => {
     await notify([o?.inbox, p.inbox].filter(Boolean) as string[], "dm_update", { from: p.uuid, with: to, id: data.id, edited: true });

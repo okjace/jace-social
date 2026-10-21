@@ -15,7 +15,7 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 
 1. **Supabase:** create a free project at <https://supabase.com>.
    - **Security options when creating the project:** Data API **on**, "Automatically expose new tables" **off**, automatic RLS **on**.
-   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace) `supabase/008_jace_bot.sql` (the official Jace bot) and `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
+   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace), `supabase/008_jace_bot.sql` (the official Jace bot), `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones) and `supabase/010_account_deletion.sql` (deleting your account through the Jace bot, recoverable for 10 days). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
    - **Realtime → Settings:** make sure public channel access is allowed (it's the default).
    - **Project Settings → API Keys:** copy the project URL, the **publishable** key and the **secret** key.
 2. **Vercel:** New Project, then import `okjace/jace-social`.
@@ -48,6 +48,11 @@ bot) runs it. See `lib/jaceBot.ts`:
   now the Jace bot! Ask me a question!" for accounts from before.
 - **Bans:** from someone's profile, the bot bans them from all of Jace Social (signed out, can't sign
   in again), and, if wanted, their linked Jace account (Jace's `/api/oauth/moderation`).
+- **Deleting your account:** "delete my account" to the bot -> sign in again -> "Are you sure?" -> a
+  recovery ID. The account is set aside under a hidden id for 10 days (the login is free again); the
+  recovery ID pasted to the bot from a new account turns that account back into the old one. The cron
+  run deletes it for good after 10 days. See `lib/accountDeletion.ts` and `010_account_deletion.sql`;
+  test: `scripts/test-account-deletion.mjs`.
 
 ## Jace messages
 

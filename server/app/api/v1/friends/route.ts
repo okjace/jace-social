@@ -25,8 +25,8 @@ export const GET = handler(async (req) => {
   return {
     jace,
     friends: friends.filter((f) => f.uuid !== JACE_BOT).map((f) => ({ ...publicProfile(f), unread: unreadBy[f.uuid] ?? 0 })),
-    incoming: (pending.data ?? []).filter((r) => r.addressee === p.uuid).map((r) => publicProfile(r.a as unknown as Profile)),
-    outgoing: (pending.data ?? []).filter((r) => r.requester === p.uuid).map((r) => publicProfile(r.b as unknown as Profile)),
+    incoming: (pending.data ?? []).filter((r) => r.addressee === p.uuid && !(r.a as unknown as Profile)?.deleted_at).map((r) => publicProfile(r.a as unknown as Profile)),
+    outgoing: (pending.data ?? []).filter((r) => r.requester === p.uuid && !(r.b as unknown as Profile)?.deleted_at).map((r) => publicProfile(r.b as unknown as Profile)),
   };
 });
 
@@ -45,7 +45,7 @@ async function findTarget(b: { name?: string; uuid?: string }): Promise<Profile>
     const byHandle = await profileByHandle(name);
     if (byHandle) return byHandle;
     const { data } = await db().from("profiles").select("*").ilike("jace_name", name.replace(/[%_\\]/g, "")).limit(1).maybeSingle();
-    return data as Profile | null;
+    return data?.deleted_at ? null : data as Profile | null;
   };
   if (jaceOnly) {
     const j = await jace();
@@ -66,6 +66,7 @@ export const POST = handler(async (req) => {
   const p = await me(req);
   const other = await findTarget(await body<{ name?: string; uuid?: string }>(req));
   if (other.uuid === p.uuid) throw new ApiError(400, "That's you!");
+  if (other.deleted_at) throw new ApiError(404, "Player not found");
 
   const { data: existing } = await db().from("friendships").select("*")
     .or(`and(requester.eq.${p.uuid},addressee.eq.${other.uuid}),and(requester.eq.${other.uuid},addressee.eq.${p.uuid})`)

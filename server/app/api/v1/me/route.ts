@@ -1,7 +1,11 @@
 // GET: your own profile (everything friends see, plus account details)
 // PATCH {display_name?, handle?, bio?, pronouns?, accent_color?, links?, status?, custom_status?, status_emoji?}
 //   handle: your unique @name (3-20: letters, numbers, _ and .), changeable once every 7 days
+// DELETE: delete your account (ask the Jace bot). Only with a session from signing in again in the last
+//   10 minutes. -> {recovery_id, expires_at}: pasting the recovery ID to the Jace bot from a new account
+//   within 10 days brings it all back (lib/accountDeletion.ts)
 import { connectionInfo } from "@/lib/jaceSync";
+import { deleteAccount } from "@/lib/accountDeletion";
 import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
   type Profile } from "@/lib/server";
@@ -123,3 +127,5 @@ export const PATCH = handler(async (req) => {
   await notify(friends.map((f) => f.inbox), "presence", { uuid: p.uuid });
   return own(data as Profile);
 });
+
+export const DELETE = handler(async (req) => deleteAccount(await me(req), req));

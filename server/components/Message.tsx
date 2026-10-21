@@ -1,7 +1,9 @@
 "use client";
 // One message in a chat: who sent it, the text, files, link previews, reactions, the
 // message it replies to, and the hover toolbar.
-import { BotTag } from "./JaceBot";
+import { BotTag, JACE_BOT } from "./JaceBot";
+import { DeleteAccountButton } from "./DeleteAccount";
+import { DELETE_MARK } from "@/lib/deleteMark";
 import { useState } from "react";
 import { timeLabel, type Attachment, type Embed, type Message, type Person, type ReplyPreview, type Role } from "@/lib/client";
 import { EmojiPicker, QUICK_REACTIONS } from "./EmojiPicker";
@@ -121,7 +123,10 @@ export function MessageRow({ m, first, sender, mine, mentions, roles, reply, rep
           </div>
         ) : (
           m.body && <div className={`body${jumboEmoji(m.body) ? " jumbo" : ""}`}>
-            <Markdown text={m.body} mentions={mentions} />{m.edited_at && <span className="edited">(edited)</span>}
+            {m.sender === JACE_BOT && m.body.includes(DELETE_MARK)        // the Jace bot's "delete my account" answer
+              ? <><Markdown text={m.body.replace(DELETE_MARK, "").trim()} mentions={mentions} /><div><DeleteAccountButton /></div></>
+              : <Markdown text={m.body} mentions={mentions} />}
+            {m.edited_at && <span className="edited">(edited)</span>}
           </div>
         )}
         {!!m.attachments?.length && <Files files={m.attachments} onImage={onImage} />}

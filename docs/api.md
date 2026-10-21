@@ -265,7 +265,10 @@ methods: POST methods: DELETE
 GET: your own profile (everything friends see, plus account details)
 PATCH {display_name?, handle?, bio?, pronouns?, accent_color?, links?, status?, custom_status?, status_emoji?}
   handle: your unique @name (3-20: letters, numbers, _ and .), changeable once every 7 days
-methods: GET methods: PATCH 
+DELETE: delete your account (ask the Jace bot). Only with a session from signing in again in the last
+  10 minutes. -> {recovery_id, expires_at}: pasting the recovery ID to the Jace bot from a new account
+  within 10 days brings it all back (lib/accountDeletion.ts)
+methods: GET methods: PATCH methods: DELETE 
 
 ## /api/v1/messages/direct/[id]
 PATCH {body}: edit your own direct message; DELETE: delete it

@@ -13,6 +13,7 @@ import { JACE } from "./jace";
 import { DM_MAX, splitBody } from "./jaceSyncCore";
 import { ApiError, db, inboxesOf, JACE_BOT, notify, type Profile } from "./server";
 import { ensureJaceBot } from "./bots";
+import { asksToDelete, DELETE_MARK, findRecoveryId, recoverAccount, RECOVER_DAYS } from "./accountDeletion";
 
 export const WELCOME_NEW = "Welcome to Jace Social! Add your friends and make Jace Social feel like home!";
 export const WELCOME_EXISTING = "This is now the Jace bot! Ask me a question!";
@@ -76,9 +77,19 @@ export async function setThreadMode(p: Profile, human: boolean) {
 }
 
 /** Someone wrote to the Jace bot: answer with AI after replying to them (unless a person has it). */
-export function answerLater(p: Profile) {
+export function answerLater(p: Profile, text = "") {
   if (p.is_bot) return;
   after(async () => {
+    // deleting and recovering your account work whoever has the chat (lib/accountDeletion.ts)
+    const recovery = findRecoveryId(text);
+    if (recovery) { await botSay(p, await recoverAccount(p, recovery)); return; }
+    if (asksToDelete(text)) {
+      await botSay(p, `I can delete your account. First you'll sign in again to show it's you, then I'll ask if you're sure.
+
+You'll get a **recovery ID**: for ${RECOVER_DAYS} days, pasting it here from a new account brings everything back. After that it's gone for good.
+${DELETE_MARK}`);
+      return;
+    }
     if ((await threadMode(p.uuid)) !== "ai") return;
     await aiAnswer(p).catch((e) => console.error("jace ai", e));
   });

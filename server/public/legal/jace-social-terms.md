@@ -40,19 +40,23 @@ Server owners and admins can make extra rules for their servers, and can remove,
 
 We can remove content, and suspend or ban accounts, that break these rules or put others at risk. A ban signs you out everywhere and stops you signing in again. If your account is linked to Jace, the ban can also apply to your Jace account. To ask about a ban, open an issue on GitHub.
 
-## 6. The Jace bot
+## 6. Deleting your account
+
+You can delete your account at any time by asking the Jace bot. You get a recovery ID that can bring it back for 10 days; after that it's deleted for good and can't be recovered. Keep your recovery ID private: anyone who has it can recover your account into theirs.
+
+## 7. The Jace bot
 
 The official Jace bot answers questions with AI, which can be wrong. Don't rely on it for anything important. Press **Talk to a person** to reach a real person.
 
-## 7. Bots, the API and custom CSS
+## 8. Bots, the API and custom CSS
 
 - If you make a bot or use the API, you're responsible for what it does. Keep its token secret.
 - Custom CSS only changes how Jace Social looks for you. Don't paste CSS from people you don't trust.
 
-## 8. Changes
+## 9. Changes
 
 We may change these Terms. When we do, we'll update the date at the top. Using Jace Social after a change means you accept the new Terms.
 
-## 9. Contact
+## 10. Contact
 
 Open an issue on GitHub: github.com/okjace/jace-social
