@@ -79,7 +79,7 @@ html[data-bgimage="1"] .sidebar { background: color-mix(in srgb, var(--bg2) var(
 html[data-bgimage="1"] .main { background: color-mix(in srgb, var(--panel) var(--panel-alpha), transparent); }
 html[data-bgimage="1"] .right { background: color-mix(in srgb, var(--bg2) var(--panel-alpha), transparent); }
 /* your card in the corner: the same see-through as the sidebar, so the background shows through it too */
-html[data-bgimage="1"] :is(.me-panel, .voice-bar) { background: color-mix(in srgb, var(--bg2) var(--panel-alpha), transparent); border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+html[data-bgimage="1"] :is(.me-panel, .voice-bar) { background: transparent; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }   /* inside the sidebar, which is already see-through */
 html[data-bgimage="1"] .app { background: var(--bg-image) center / cover no-repeat, var(--bg); }
 .bg-preview { height: 90px; border-radius: 10px; background: var(--panel2) center / cover no-repeat; display: flex; align-items: flex-end;
   justify-content: flex-end; gap: 6px; padding: 8px; }
