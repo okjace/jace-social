@@ -196,11 +196,16 @@ export async function syncPerson(uuid: string): Promise<Stats & { skipped?: stri
     const cache = new Map<string, Profile>([[me.jace_sub, me]]);
     const { data: curRows } = await db().from("jace_sync_cursors").select("conversation, last_at").eq("uuid", uuid);
     const cursors = new Map((curRows ?? []).map((r) => [r.conversation as string, r.last_at as string]));
+    // This Jace login's account was deleted (lib/accountDeletion.ts): a new account starts fresh -
+    // only Jace messages from after that, so the old chats, friends and groups don't come back.
+    const { data: gone } = await db().from("profiles").select("deleted_at").eq("deleted_jace_sub", me.jace_sub)
+      .not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(1).maybeSingle();
+    const floor = (gone?.deleted_at as string | undefined) ?? undefined;
     const list = await jace<Conversations>(accessToken, "GET", "/api/oauth/messages");
 
     for (const d of list.direct ?? []) {
       const key = `dm:${d.user_id}`;
-      const since = cursors.get(key);
+      const since = cursors.get(key) ?? floor;
       if (since && d.last_message && new Date(d.last_message.created_at) <= new Date(since)) continue;   // nothing new
       if (since && !d.last_message) continue;
       const partner = await profileForJace(d.user_id, d.username, cache);
@@ -216,10 +221,11 @@ export async function syncPerson(uuid: string): Promise<Stats & { skipped?: stri
 
     for (const g of list.groups ?? []) {
       const key = `g:${g.id}`;
-      const since = cursors.get(key);
-      const channelId = await channelForGroup(g, me, cache);
+      const since = cursors.get(key) ?? floor;
       const { messages } = await jace<{ messages: JaceMessage[] }>(accessToken, "GET",
         `/api/oauth/messages/groups/${encodeURIComponent(g.id)}${since ? `?since=${encodeURIComponent(since)}` : ""}`);
+      if (!messages?.length && since === floor && floor) continue;   // a group from before the account was deleted
+      const channelId = await channelForGroup(g, me, cache);
       if (!messages?.length) continue;
       const n = await importGroup(channelId, me, messages, cache, first);
       stats.imported += n; stats.conversations++;

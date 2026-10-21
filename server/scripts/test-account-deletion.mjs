@@ -97,7 +97,12 @@ assert.notEqual(again.uuid, alice.uuid);
 const newMe = await api(again.token, "/me");
 assert.notEqual(newMe.handle, "alice_test", "the old handle stays reserved");
 assert.equal(newMe.bio, null);
-assert.ok(!(await api(again.token, "/friends")).friends.some((f) => f.uuid === carol.uuid));
+await until("the new account's Jace import", async () => (await api(again.token, "/jace/messages")).imported);
+await api(again.token, "/jace/messages/sync", { body: {} });
+const newFriends = (await api(again.token, "/friends")).friends;
+assert.deepEqual(newFriends.map((f) => f.name), [], "no friends come back from the old Jace chats");
+assert.equal((await api(again.token, "/groups")).groups.length, 0, "no old group chats either");
+assert.equal((await api(again.token, `/messages?with=${bob.uuid}`)).messages.length, 0, "and no old messages");
 
 step("a wrong recovery ID doesn't work");
 assert.match((await askBot(again.token, "JSR-2222-3333-4444-5555")).body, /doesn't work/);
