@@ -71,6 +71,7 @@ textarea { resize: vertical; }
   display: grid; place-items: center; font-weight: 800; color: var(--text); transition: border-radius .15s, background .15s;
   overflow: hidden; flex: none; }
 .rail-item:hover, .rail-item.active { border-radius: 15px; background: var(--green); color: var(--on-accent); }
+.rail-logo { width: 100%; height: 100%; object-fit: cover; transform: scale(1.07); }   /* logo.png has a small clear edge */
 .rail-item img { width: 100%; height: 100%; object-fit: cover; }
 .rail-item .badge { position: absolute; right: -2px; bottom: -2px; }
 .rail-sep { width: 32px; height: 2px; background: var(--line); border-radius: 1px; flex: none; }

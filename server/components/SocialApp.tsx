@@ -410,7 +410,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
       <nav className="rail" aria-label="Servers">
         <button className={`rail-item${view.kind !== "server" ? " active" : ""}`} title="Home"
           onClick={() => { setView({ kind: "home" }); setMobileMain(false); }}>
-          <span style={{ fontSize: 22 }}>⛏</span>
+          <img className="rail-logo" src="/logo.png" alt="Jace Social" />
           {friends.incoming.length > 0 && <span className="badge">{friends.incoming.length}</span>}
         </button>
         <div className="rail-sep" />
