@@ -210,9 +210,8 @@ export async function syncPerson(uuid: string): Promise<Stats & { skipped?: stri
     const cursors = new Map((curRows ?? []).map((r) => [r.conversation as string, r.last_at as string]));
     // This Jace login's account was deleted (lib/accountDeletion.ts): a new account starts fresh -
     // only Jace messages from after that, so the old chats, friends and groups don't come back.
-    const { data: gone } = await db().from("profiles").select("deleted_at").eq("deleted_jace_sub", me.jace_sub)
-      .not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(1).maybeSingle();
-    const floor = (gone?.deleted_at as string | undefined) ?? undefined;
+    const floors = new Map<string, string | null>();
+    const floor = (await deletedAt(me.jace_sub, floors)) ?? undefined;
     const list = await jace<Conversations>(accessToken, "GET", "/api/oauth/messages");
 
     for (const d of list.direct ?? []) {
@@ -222,8 +221,11 @@ export async function syncPerson(uuid: string): Promise<Stats & { skipped?: stri
       if (since && !d.last_message) continue;
       const partner = await profileForJace(d.user_id, d.username, cache);
       if (partner.uuid === me.uuid) continue;
+      // ...and the same when the other person deleted theirs: nothing from before comes to their new account
+      const from = later(since, await deletedAt(d.user_id, floors));
+      if (from && d.last_message && new Date(d.last_message.created_at) <= new Date(from)) continue;
       const { messages } = await jace<{ messages: JaceMessage[] }>(accessToken, "GET",
-        `/api/oauth/messages/dm/${encodeURIComponent(d.user_id)}${since ? `?since=${encodeURIComponent(since)}` : ""}`);
+        `/api/oauth/messages/dm/${encodeURIComponent(d.user_id)}${from ? `?since=${encodeURIComponent(from)}` : ""}`);
       if (!messages?.length) continue;
       await ensureFriends(me.uuid, partner.uuid);
       const n = await importDm(me, partner, messages, cache, first);
@@ -237,9 +239,9 @@ export async function syncPerson(uuid: string): Promise<Stats & { skipped?: stri
       const { messages } = await jace<{ messages: JaceMessage[] }>(accessToken, "GET",
         `/api/oauth/messages/groups/${encodeURIComponent(g.id)}${since ? `?since=${encodeURIComponent(since)}` : ""}`);
       if (!messages?.length && since === floor && floor) continue;   // a group from before the account was deleted
-      const channelId = await channelForGroup(g, me, cache);
+      const channelId = await channelForGroup(g, me, cache, floors);
       if (!messages?.length) continue;
-      const n = await importGroup(channelId, me, messages, cache, first);
+      const n = await importGroup(channelId, me, messages, cache, first, floors);
       stats.imported += n; stats.conversations++;
       await saveCursor(uuid, key, messages);
     }
@@ -317,11 +319,27 @@ async function importDm(me: Profile, partner: Profile, messages: JaceMessage[], 
   return n;
 }
 
-/** The group chat for a Jace group: made the first time anyone syncs it; new Jace members are added. */
-async function channelForGroup(g: Conversations["groups"][number], me: Profile, cache: Map<string, Profile>): Promise<string> {
+/** When the Jace Social account of this Jace login was last deleted (null: never). Cached per sync. */
+async function deletedAt(sub: string | null | undefined, floors: Map<string, string | null>): Promise<string | null> {
+  if (!sub) return null;
+  if (!floors.has(sub)) {
+    const { data } = await db().from("profiles").select("deleted_at").eq("deleted_jace_sub", sub)
+      .not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(1).maybeSingle();
+    floors.set(sub, (data?.deleted_at as string | undefined) ?? null);
+  }
+  return floors.get(sub)!;
+}
+const later = (a: string | undefined, b: string | null) => (!b ? a : !a || new Date(b) > new Date(a) ? b : a);
+
+/** The group chat for a Jace group: made the first time anyone syncs it; new Jace members are added
+ *  (but not someone whose account was deleted since: they come back only by writing in it again). */
+async function channelForGroup(g: Conversations["groups"][number], me: Profile, cache: Map<string, Profile>,
+  floors: Map<string, string | null>): Promise<string> {
   const { data: existing } = await db().from("jace_group_links").select("channel_id").eq("jace_group_id", g.id).maybeSingle();
   let channelId = existing?.channel_id as string | undefined;
-  const members = await Promise.all([...new Set([...(g.member_ids ?? []), me.jace_sub!])].map((sub) => profileForJace(sub, undefined, cache)));
+  const subs = [...new Set([...(g.member_ids ?? []), me.jace_sub!])];
+  const keep = await Promise.all(subs.map(async (sub) => sub === me.jace_sub || !(await deletedAt(sub, floors))));
+  const members = await Promise.all(subs.filter((_, i) => keep[i]).map((sub) => profileForJace(sub, undefined, cache)));
   if (!channelId) {
     const name = (g.name || "Jace group").trim().slice(0, 48) || "Jace group";
     const { data: ch, error } = await db().from("channels")
@@ -344,12 +362,15 @@ async function channelForGroup(g: Conversations["groups"][number], me: Profile, 
   return channelId!;
 }
 
-async function importGroup(channelId: string, me: Profile, messages: JaceMessage[], cache: Map<string, Profile>, history: boolean) {
+async function importGroup(channelId: string, me: Profile, messages: JaceMessage[], cache: Map<string, Profile>, history: boolean,
+  floors: Map<string, string | null>) {
   const { data: rows } = await db().from("channel_members").select("uuid").eq("channel_id", channelId);
   const members = (rows ?? []).map((r) => r.uuid as string);
   let n = 0, newest = 0;
   for (const m of messages) {
     const body = String(m.body ?? "");
+    const gone = await deletedAt(m.from_id, floors);
+    if (gone && new Date(m.created_at) <= new Date(gone)) continue;   // written by an account that's deleted now
     if (!body.trim() || !(await claim(m.id, "ch"))) continue;
     try {
       const sender = await profileForJace(m.from_id, m.from_name, cache);
