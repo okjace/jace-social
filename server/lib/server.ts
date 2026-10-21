@@ -198,7 +198,8 @@ function deletedProfile(uuid: string) {
 
 // --- handles: each account's unique @name, chosen by its owner (supabase/006_handles.sql)
 export const HANDLE_RE = /^[a-z0-9_](?:[a-z0-9_.]{1,18}[a-z0-9_])$/;
-const RESERVED = new Set(["everyone", "here", "jace", "jacesocial", "admin", "administrator", "moderator", "mod", "support",
+export const JACE_BOT_HANDLE = "jacebot";                    // the official Jace bot's (lib/bots.ts)
+const RESERVED = new Set(["everyone", "here", "jace", "jacesocial", JACE_BOT_HANDLE, "jace_bot", "jace.bot", "admin", "administrator", "moderator", "mod", "support",
   "system", "staff", "official", "help", "null", "undefined"]);
 export const HANDLE_COOLDOWN_DAYS = 7;
 
