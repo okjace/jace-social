@@ -6,6 +6,7 @@
 //   3. "Are you sure?" -> DELETE /api/v1/me with that fresh session -> the recovery ID, shown once
 //   4. in a new account, paste the recovery ID to the Jace bot -> that account becomes the old one
 import { randomBytes } from "node:crypto";
+import { after } from "next/server";
 import { ApiError, db, newPlayerId, notify, sha256, type Profile } from "./server";
 
 export { DELETE_MARK } from "./deleteMark";
@@ -37,7 +38,7 @@ export async function deleteAccount(p: Profile, req: Request) {
   const expires = new Date(Date.now() + RECOVER_DAYS * 86400_000).toISOString();
   const { error } = await db().rpc("park_account", { acct: p.uuid, parked: newPlayerId(), hash: sha256(normalize(id)), expires });
   if (error) throw error;
-  await notify([p.inbox], "signed_out", {});                       // the app on their other devices
+  after(() => notify([p.inbox], "signed_out", {}));                 // their other devices, after this answer arrives
   return { recovery_id: id, expires_at: expires };
 }
 

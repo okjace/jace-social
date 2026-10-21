@@ -10,6 +10,9 @@ import { Modal } from "./ui";
 type Fresh = { token: string; uuid: string };
 type Recovery = { recovery_id: string; expires_at: string };
 const RECOVERY_KEY = "jace_social_recovery";
+/** This tab is deleting its account: it shows the recovery ID itself (SocialApp ignores "signed_out"). */
+let deleting = false;
+export const isDeletingAccount = () => deleting;
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 
 /** Calls the API as the session from signing in again (not the one the app is using). */
@@ -75,16 +78,24 @@ function DeleteAccount({ me, onClose }: { me: Me; onClose: () => void }) {
 
   async function deleteIt() {
     if (!fresh) return;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); deleting = true;
     try {
-      const done = await as<Recovery>(fresh.token, "/me", "DELETE");
+      const r = await fetch("/api/v1/me", { method: "DELETE", headers: { Authorization: `Bearer ${fresh.token}` }, cache: "no-store" });
+      const text = await r.text();
+      let done: Partial<Recovery> & { error?: string } = {};
+      try { done = JSON.parse(text); } catch { /* not JSON */ }
+      if (!r.ok) throw new Error(done.error ?? `Error ${r.status}`);
+      if (!done.recovery_id || !done.expires_at) {   // never sign out without the recovery ID on screen
+        console.error("delete account: unexpected answer", r.status, r.url, text.slice(0, 300));
+        throw new Error(`The recovery ID didn't come back (${r.status}). Don't close this - ask for help with Talk to a person.`);
+      }
       // signed out now: the sign-in screen shows the recovery ID (this app closes as its session ends)
       try { sessionStorage.setItem(RECOVERY_KEY, JSON.stringify(done)); }
-      catch { alert(`Your recovery ID (works until ${new Date(done.expires_at).toLocaleString()}):\n\n${done.recovery_id}`); }
+      catch { alert(`Your recovery ID (works until ${new Date(done.expires_at!).toLocaleString()}):\n\n${done.recovery_id}`); }
       forgetAccount(me.uuid);
       setToken(null);
       location.href = "/app";
-    } catch (e) { setError((e as Error).message); setBusy(false); }
+    } catch (e) { deleting = false; setError((e as Error).message); setBusy(false); }
   }
 
   return (
@@ -129,7 +140,7 @@ export function RecoveryNotice() {
     try { setR(JSON.parse(sessionStorage.getItem(RECOVERY_KEY) ?? "null") as Recovery | null); } catch { /* */ }
   }, []);
   const [copied, setCopied] = useState(false);
-  if (!r) return null;
+  if (!r?.recovery_id) return null;
   const close = () => { try { sessionStorage.removeItem(RECOVERY_KEY); } catch { /* */ } setR(null); };
   return (
     <Modal onClose={() => {}}>

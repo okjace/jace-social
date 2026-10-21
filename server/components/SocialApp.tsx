@@ -19,7 +19,7 @@ import { LinkGuard } from "./Markdown";
 import { nameStyle } from "./Message";
 import { MinecraftDevice } from "./MinecraftDevice";
 import { hasAgreed, LegalDialog } from "./Legal";
-import { RecoveryNotice } from "./DeleteAccount";
+import { isDeletingAccount, RecoveryNotice } from "./DeleteAccount";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
 import { Announcements, BotTag, Docs, JACE_BOT, JaceInbox, JaceTabs, inboxPerson, type InboxEntry } from "./JaceBot";
@@ -60,7 +60,7 @@ export default function SocialApp({ inviteCode }: { inviteCode?: string }) {
       setMe(m);
       rememberAccount({ uuid: m.uuid, name: m.name, avatar_url: m.avatar_url, is_bot: m.is_bot });   // for the account switcher
     }).catch((e) => {
-      if (e.status === 401) { setToken(null); setTok(null); } else setError(e.message);
+      if (e.status === 401) { if (!isDeletingAccount()) { setToken(null); setTok(null); } } else setError(e.message);
     });
   }, [token]);
 
@@ -297,8 +297,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
         setTyping((t) => ({ ...t, [key]: { ...(t[key] ?? {}), [p.from]: { name: p.name, until: Date.now() + 8000 } } }));
       } else if (event === "account_recovered") {    // a recovery ID brought an old account back into this one
         location.reload();
-      } else if (event === "signed_out") {           // this account was deleted (on this or another device)
-        setToken(null); location.href = "/app";
+      } else if (event === "signed_out") {           // this account was deleted (on another device)
+        if (!isDeletingAccount()) { setToken(null); location.href = "/app"; }
       } else if (event === "jace_support") {          // someone asked the Jace bot for a person
         loadInbox();
         notifyUser(`${p.name ?? "Someone"} wants a person`, "In the Jace inbox", { important: true });
