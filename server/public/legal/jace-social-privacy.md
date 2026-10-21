@@ -18,7 +18,7 @@ Your settings (theme, accent color, background picture, custom CSS, notification
 
 ## Jace messages
 
-When you sign in with Jace (or link it), Jace Social can sync your direct messages and group chats with your Jace account at jaceo.vercel.app:
+When you sign in with Jace (or link it), Jace Social can sync your direct messages and group chats with your Jace account at jaceo.vercel.app. It's **off until you turn it on** (Settings → Accounts → Jace messages); signing in never imports anything by itself. When it's on:
 
 - Your past Jace conversations are copied here once, and new Jace messages arrive here as they come in.
 - Messages you send here to other Jace people, and in group chats that came from Jace, are also saved to your Jace account. Only the text goes to Jace: not files, reactions, edits or deletions.

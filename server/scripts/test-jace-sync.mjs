@@ -59,8 +59,17 @@ const dmWith = async (token, uuid) => (await api(token, `/messages?with=${uuid}`
 const step = (s) => console.log(`\n▶ ${s}`);
 
 // 1. First connect imports the old history once, with original times
-step("alice connects: her Jace history comes in");
+step("signing in with Jace imports nothing: syncing starts off");
 const alice = await signIn("alice");
+await sleep(2500);
+let info = await api(alice.token, "/jace/messages");
+assert.equal(info.state, "ok", "the token is kept");
+assert.equal(info.sync_enabled, false);
+assert.equal(info.imported, false);
+assert.equal((await api(alice.token, "/friends")).friends.length, 0, "no friends from Jace chats yet");
+
+step("alice turns on Sync messages with Jace: her Jace history comes in");
+await api(alice.token, "/jace/messages", { method: "PATCH", body: { sync: true } });
 await until("alice's import", async () => (await api(alice.token, "/jace/messages")).imported);
 const friends = (await api(alice.token, "/friends")).friends;
 const bob0 = friends.find((f) => f.jace_name === "bob");
@@ -86,6 +95,7 @@ assert.equal((await dmWith(alice.token, bob0.uuid)).length, dmCount);
 step("bob signs in: the placeholder becomes his account, and nothing is imported twice");
 const bob = await signIn("bob");
 assert.equal(bob.uuid, bob0.uuid);
+await api(bob.token, "/jace/messages", { method: "PATCH", body: { sync: true } });
 await until("bob's import", async () => (await api(bob.token, "/jace/messages")).imported);
 assert.equal((await dmWith(bob.token, alice.uuid)).length, dmCount);
 

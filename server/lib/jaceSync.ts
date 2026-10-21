@@ -73,16 +73,28 @@ function tokenOf(c: Connection | null): string | null {
   try { return decryptToken(c.token_enc, key); } catch { return null; }
 }
 
-/** Signing in (or linking) with Jace gave us a token: keep it, then import and resend anything queued. */
+/**
+ * Signing in (or linking) with Jace gave us a token: keep it. It never starts syncing by itself:
+ * a new connection starts with syncing OFF, and nothing is imported until the person turns on
+ * "Sync messages with Jace" (Settings -> Accounts -> Jace messages). People who already sync keep
+ * syncing (the token is just fresh again, e.g. after Reconnect).
+ */
 export async function saveConnection(uuid: string, u: JaceUser) {
   const key = tokenKey();
   if (!key || !u.token || !/\bmessages\b/.test(u.scope || "messages")) return;   // no key, or a token without messages
+  const before = await connection(uuid);
   const { error } = await db().from("jace_connections").upsert({
     uuid, token_enc: encryptToken(u.token, key), granted_at: new Date().toISOString(),
     status: u.banned ? "banned" : "ok", last_error: u.banned ? "This Jace account is banned" : null, syncing_until: null,
+    sync_enabled: before?.sync_enabled ?? false,
   });
   if (error) { console.error("jace connection", error.message); return; }
-  if (!u.banned) after(async () => {
+  if (!u.banned && before?.sync_enabled) startSync(uuid);   // reconnected: pick up where it left off
+}
+
+/** After answering: pull what's new from Jace (everything, the first time) and resend anything queued. */
+export function startSync(uuid: string) {
+  after(async () => {
     await syncPerson(uuid).catch((e) => console.error("jace import", e));
     await retryOutbox({ sender: uuid }).catch((e) => console.error("jace outbox", e));
   });
@@ -94,7 +106,7 @@ export async function connectionInfo(uuid: string) {
   return {
     available: syncAvailable(),
     state: !c ? "none" : c.status === "ok" && !c.token_enc ? "disconnected" : c.status,
-    sync_enabled: c?.sync_enabled ?? true,
+    sync_enabled: c?.sync_enabled ?? false,
     imported: !!c?.imported_at, last_sync_at: c?.last_sync_at ?? null, last_error: c?.last_error ?? null,
     granted_at: c?.granted_at ?? null,
   };

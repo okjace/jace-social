@@ -74,9 +74,8 @@ console.log("  answer:", answer.body.slice(0, 80));
 if (!process.env.CLOUDFLARE_AI_TOKEN) assert.match(answer.body, /Friends and your @handle/, "the best-matching Doc");
 await api(alice.token, "/messages", { body: { to: JACE_BOT, body: "zzqx blorp" } });
 await until("the not-sure answer", async () => /not sure/.test((await chatWithBot(alice.token)).at(-1).body));
-// (alice and bob talk on the mock Jace, so the Jace sync made them friends; carol isn't alice's friend)
-const [carol] = await sb("profiles?jace_name=eq.carol&select=uuid");
-const notFriends = await api(alice.token, "/messages", { body: { to: carol.uuid, body: "hi" }, allowError: true });
+// (signing in doesn't sync Jace messages, so alice and bob aren't friends)
+const notFriends = await api(alice.token, "/messages", { body: { to: bob.uuid, body: "hi" }, allowError: true });
 assert.equal(notFriends.status, 403, "other people still need to be friends");
 
 step("Talk to a person: the AI stops, the bot's inbox shows it");

@@ -438,7 +438,7 @@ function AdvancedTab(props: SettingsProps) {
 }
 
 /** Settings -> Accounts: syncing your direct messages and group chats with your Jace messages. */
-export function JaceMessagesCard({ me, onConnect, onError }: { me: Me; onConnect: () => void; onError: Err }) {
+export function JaceMessagesCard({ me, onConnect, onError }: { me: Me; onConnect: () => Promise<void>; onError: Err }) {
   const [info, setInfo] = useState<JaceMessages | null>(me.jace_messages ?? null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -455,13 +455,21 @@ export function JaceMessagesCard({ me, onConnect, onError }: { me: Me; onConnect
         <div style={{ flex: 1 }}><b>Jace messages</b>
           <div className="muted small">{
             info.state === "banned" ? "Your Jace account is banned, so your messages don't sync with Jace."
-            : info.state === "none" ? "Bring your Jace conversations here, and keep them in sync."
+            : info.state === "none" || (!info.sync_enabled && !info.imported) ? "Bring your Jace conversations here, and keep them in sync."
             : info.state === "disconnected" ? "Not connected - reconnect to keep your messages in sync."
             : !info.sync_enabled ? "Syncing is off."
             : info.last_sync_at ? `Last synced ${new Date(info.last_sync_at).toLocaleString()}` : "Bringing your Jace messages in…"}</div>
         </div>
         {(info.state === "none" || info.state === "disconnected") &&
-          <button className="btn primary small" onClick={onConnect}>{info.state === "none" ? "Connect" : "Reconnect Jace"}</button>}
+          <button className="btn primary small" onClick={() => void (async () => {
+            const was = info.state;
+            await onConnect();                                // signs in with Jace again for a token
+            const now = await api<JaceMessages>("/jace/messages").catch(() => null);
+            // "Connect" means "sync my messages": switch it on (Reconnect keeps what it was)
+            if (was === "none" && now?.state === "ok" && !now.sync_enabled)
+              await run(() => api("/jace/messages", { method: "PATCH", body: { sync: true } }));
+            else if (now) setInfo(now);
+          })()}>{info.state === "none" ? "Connect" : "Reconnect Jace"}</button>}
       </div>
       {connected && <>
         <label className="check"><input type="checkbox" checked={info.sync_enabled} disabled={busy}

@@ -64,8 +64,9 @@ await api(alice.token, "/friends", { body: { name: "@carol_test" } });
 await api(carol.token, "/friends", { body: { uuid: alice.uuid } });
 await api(alice.token, "/messages", { body: { to: carol.uuid, body: "before I deleted it" } });
 assert.ok((await api(carol.token, "/friends")).friends.some((f) => f.uuid === alice.uuid));
+await api(alice.token, "/jace/messages", { method: "PATCH", body: { sync: true } });   // she syncs her Jace messages
+await until("alice's Jace import", async () => (await api(alice.token, "/jace/messages")).imported, 60_000);
 const [bob] = await sb("profiles?jace_name=eq.bob&select=uuid");
-await until("alice's Jace import", async () => (await api(alice.token, "/jace/messages")).imported);
 const withBobBefore = (await api(alice.token, `/messages?with=${bob.uuid}`)).messages.length;
 assert.ok(withBobBefore > 0, "alice's Jace chat with bob came in");
 
@@ -97,8 +98,10 @@ assert.notEqual(again.uuid, alice.uuid);
 const newMe = await api(again.token, "/me");
 assert.notEqual(newMe.handle, "alice_test", "the old handle stays reserved");
 assert.equal(newMe.bio, null);
-await until("the new account's Jace import", async () => (await api(again.token, "/jace/messages")).imported);
-await api(again.token, "/jace/messages/sync", { body: {} });
+assert.equal((await api(again.token, "/jace/messages")).sync_enabled, false, "signing in doesn't sync");
+// even turning syncing on doesn't bring back the deleted account's Jace chats (only newer ones)
+await api(again.token, "/jace/messages", { method: "PATCH", body: { sync: true } });
+await until("the new account's Jace import", async () => (await api(again.token, "/jace/messages")).imported, 60_000);
 const newFriends = (await api(again.token, "/friends")).friends;
 assert.deepEqual(newFriends.map((f) => f.name), [], "no friends come back from the old Jace chats");
 assert.equal((await api(again.token, "/groups")).groups.length, 0, "no old group chats either");
