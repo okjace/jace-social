@@ -127,17 +127,25 @@ async function aiAnswer(p: Profile) {
 }
 
 async function askCloudflare(p: Profile, docs: Doc[], turns: { role: string; content: string }[]): Promise<string | null> {
-  const system = `You are Jace, the official bot of Jace Social: a place for friends, chats, servers and voice, with Minecraft built in (web, desktop, phones, Jace Launcher and a Minecraft mod).
-You're chatting with ${p.display_name || p.name} in their direct messages with you. Answer questions about Jace Social briefly and kindly, like a helpful friend: a few sentences, plain language.
-Use only the Docs below. If they don't cover something, say you're not sure rather than guessing, and suggest pressing "Talk to a person" so someone from Jace can help. For problems with someone's account, bans or reports, also suggest "Talk to a person".
+  // Small models guess when the Docs don't say: the rules come last (closest to the question), with
+  // the exact words to use when the answer isn't there, and little randomness (temperature).
+  const system = `You are Jace, the official help bot of Jace Social (friends, chats, servers and voice, with Minecraft built in).
+You're chatting with ${p.display_name || p.name}.
 
-# Docs
-${docs.map((d) => `## ${d.title}\n${d.body}`).join("\n\n")}`;
+# Docs (everything you know about Jace Social)
+${docs.map((d) => `## ${d.title}\n${d.body}`).join("\n\n")}
+
+# Rules
+- Answer ONLY with facts written in the Docs above. Never invent buttons, menus, settings or features.
+- If the Docs don't answer the question, reply with exactly: "${NOT_IN_DOCS}"
+- Questions that aren't about Jace Social: say you can only help with Jace Social.
+- Account problems, bans, reports or bugs: suggest pressing "Talk to a person".
+- Keep it short and friendly: one to four sentences, plain words. Name menus the way the Docs do (like Settings → Accounts).`;
   try {
     const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/${AI_MODEL()}`, {
       method: "POST", signal: AbortSignal.timeout(25_000),
       headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_AI_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "system", content: system }, ...turns], max_tokens: 600, max_completion_tokens: 600 }),
+      body: JSON.stringify({ messages: [{ role: "system", content: system }, ...turns], max_tokens: 400, max_completion_tokens: 400, temperature: 0.2 }),
     });
     const d = await r.json().catch(() => ({})) as {
       success?: boolean; errors?: { message?: string }[];
@@ -171,6 +179,7 @@ export function bestDoc(question: string, docs: Doc[]): string {
   if (!best || best.score < 2) return NO_MATCH;
   return `This might help - **${best.doc.title}**:\n\n${best.doc.body.trim()}`.slice(0, 1990);
 }
+const NOT_IN_DOCS = "I'm not sure about that one - it isn't in my Docs. Press **Talk to a person** and someone from Jace will reply here.";
 const NO_MATCH = "I'm not sure about that one. Have a look in the **Docs** tab, or press **Talk to a person** and someone from Jace will reply here.";
 const STOP = new Set(["the", "and", "how", "what", "can", "you", "your", "for", "are", "does", "with", "this", "that", "who", "why",
   "where", "when", "which", "there", "their", "about", "have", "has", "get", "make", "want", "jace", "social", "please", "help"]);
