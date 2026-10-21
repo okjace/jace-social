@@ -4,6 +4,7 @@
 // DELETE: delete your account (ask the Jace bot). Only with a session from signing in again in the last
 //   10 minutes. -> {recovery_id, expires_at}: pasting the recovery ID to the Jace bot from a new account
 //   within 10 days brings it all back (lib/accountDeletion.ts)
+// DELETE ?now=1: the same, but deleted right away and for good -> {deleted_for_good: true}
 import { connectionInfo } from "@/lib/jaceSync";
 import { deleteAccount } from "@/lib/accountDeletion";
 import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
@@ -128,4 +129,4 @@ export const PATCH = handler(async (req) => {
   return own(data as Profile);
 });
 
-export const DELETE = handler(async (req) => deleteAccount(await me(req), req));
+export const DELETE = handler(async (req) => deleteAccount(await me(req), req, new URL(req.url).searchParams.get("now") === "1"));

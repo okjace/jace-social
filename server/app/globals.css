@@ -513,3 +513,4 @@ select.btn { width: auto; }
 .legal-page h1 { margin-top: 0; }
 .legal-body, .legal-page, .jace-pane .card { white-space: pre-wrap; overflow-wrap: anywhere; }
 .legal-body .md-h, .legal-page .md-h { margin: 14px 0 0; }
+.btn.danger.solid-danger { background: var(--red); border-color: var(--red); color: #fff; }   /* "Delete my account now" */

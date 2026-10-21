@@ -323,7 +323,9 @@ async function importDm(me: Profile, partner: Profile, messages: JaceMessage[], 
 async function deletedAt(sub: string | null | undefined, floors: Map<string, string | null>): Promise<string | null> {
   if (!sub) return null;
   if (!floors.has(sub)) {
-    const { data } = await db().from("profiles").select("deleted_at").eq("deleted_jace_sub", sub)
+    // kept for good (supabase/012_deleted_logins.sql); before 012: the accounts still in their 10 days
+    const kept = await db().from("jace_deleted_logins").select("deleted_at").eq("jace_sub", sub).maybeSingle();
+    const { data } = !kept.error ? kept : await db().from("profiles").select("deleted_at").eq("deleted_jace_sub", sub)
       .not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(1).maybeSingle();
     floors.set(sub, (data?.deleted_at as string | undefined) ?? null);
   }

@@ -5,11 +5,13 @@
 //   2. the app signs you in again (Jace or Minecraft): a session made in the last 10 minutes
 //   3. "Are you sure?" -> DELETE /api/v1/me with that fresh session -> the recovery ID, shown once
 //   4. in a new account, paste the recovery ID to the Jace bot -> that account becomes the old one
+// Ending the message with "([DELETE-NOW])" deletes it right away and for good instead: the same
+// steps (DELETE_NOW_MARK, DELETE /api/v1/me?now=1), no recovery ID.
 import { randomBytes } from "node:crypto";
 import { after } from "next/server";
 import { ApiError, db, newPlayerId, notify, sha256, type Profile } from "./server";
 
-export { DELETE_MARK } from "./deleteMark";
+export { DELETE_MARK, DELETE_NOW_MARK } from "./deleteMark";
 export const RECOVER_DAYS = 10;
 const FRESH_MINUTES = 10;
 
@@ -18,6 +20,8 @@ const ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";                // no 0/O, 1
 const RECOVERY_ID = /\bJSR(?:-?[2-9A-HJ-NP-Z]{4}){4}\b/i;
 
 export const asksToDelete = (text: string) => ASKS_TO_DELETE.test(text) && !RECOVERY_ID.test(text);
+/** "... ([DELETE-NOW])": delete right away, with no 10 days to recover. */
+export const asksToDeleteNow = (text: string) => /\(\s*\[\s*DELETE-NOW\s*\]\s*\)\s*$/i.test(text);
 export const findRecoveryId = (text: string) => text.match(RECOVERY_ID)?.[0] ?? null;
 const normalize = (id: string) => id.toUpperCase().replace(/[^0-9A-Z]/g, "");   // JSRXXXXXXXXXXXXXXXX
 
@@ -27,8 +31,9 @@ function newRecoveryId() {
   return `JSR-${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8, 12)}-${chars.slice(12, 16)}`;
 }
 
-/** DELETE /api/v1/me: only with a session made in the last few minutes (signing in again). */
-export async function deleteAccount(p: Profile, req: Request) {
+/** DELETE /api/v1/me: only with a session made in the last few minutes (signing in again).
+ *  now: deleted for good at once (everything goes, no recovery ID). */
+export async function deleteAccount(p: Profile, req: Request, now = false) {
   if (p.is_bot) throw new ApiError(400, "Bots are deleted from My bots");
   const t = (req.headers.get("authorization") ?? "").replace(/^Bearer /, "");
   const { data: s } = await db().from("sessions").select("created_at, kind").eq("token_hash", sha256(t)).maybeSingle();
@@ -36,10 +41,16 @@ export async function deleteAccount(p: Profile, req: Request) {
     throw new ApiError(401, "Sign in again first, then delete your account within 10 minutes");
   const id = newRecoveryId();
   const expires = new Date(Date.now() + RECOVER_DAYS * 86400_000).toISOString();
-  const { error } = await db().rpc("park_account", { acct: p.uuid, parked: newPlayerId(), hash: sha256(normalize(id)), expires });
+  const parked = newPlayerId();
+  // set aside first either way (signs out everywhere, frees the login and handle, remembers the Jace login)
+  const { error } = await db().rpc("park_account", { acct: p.uuid, parked, hash: now ? null : sha256(normalize(id)), expires });
   if (error) throw error;
+  if (now) {
+    const { error: e } = await db().from("profiles").delete().eq("uuid", parked);   // and everything that's theirs
+    if (e) throw e;
+  }
   after(() => notify([p.inbox], "signed_out", {}));                 // their other devices, after this answer arrives
-  return { recovery_id: id, expires_at: expires };
+  return now ? { deleted_for_good: true } : { recovery_id: id, expires_at: expires };
 }
 
 /** A recovery ID sent to the Jace bot: turn this account back into the deleted one. What to answer. */

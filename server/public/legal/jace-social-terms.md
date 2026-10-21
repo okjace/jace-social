@@ -42,7 +42,7 @@ We can remove content, and suspend or ban accounts, that break these rules or pu
 
 ## 6. Deleting your account
 
-You can delete your account at any time by asking the Jace bot. You get a recovery ID that can bring it back for 10 days; after that it's deleted for good and can't be recovered. Keep your recovery ID private: anyone who has it can recover your account into theirs.
+You can delete your account at any time by asking the Jace bot. You get a recovery ID that can bring it back for 10 days; after that it's deleted for good and can't be recovered. Ending your request with "([DELETE-NOW])" deletes it for good right away, with no recovery ID. Keep your recovery ID private: anyone who has it can recover your account into theirs.
 
 ## 7. The Jace bot
 

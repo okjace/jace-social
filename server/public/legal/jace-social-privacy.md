@@ -34,7 +34,7 @@ The official Jace bot answers questions with AI: your chat with it (the latest m
 
 Ask the Jace bot to "delete my account". You sign in again to show it's you, and confirm. Your account then disappears for everyone, and you're signed out everywhere. Your Jace messages connection (its token) is deleted at once.
 
-For **10 days** we keep everything set aside, so your **recovery ID** can bring it back. After 10 days your account and everything in it - profile, friends, messages, servers you own, settings - is deleted for good. Files you uploaded may stay in storage a little longer before they're cleaned up.
+For **10 days** we keep everything set aside, so your **recovery ID** can bring it back. (End your message with **([DELETE-NOW])** to skip that: everything is deleted at once.) After 10 days your account and everything in it - profile, friends, messages, servers you own, settings - is deleted for good. Files you uploaded may stay in storage a little longer before they're cleaned up.
 
 ## Bans
 

@@ -8,6 +8,7 @@ case "${JACE_URL:-}" in http://localhost:*) ;; *) echo "Not a test setup (JACE_U
 del() { curl -sS -o /dev/null -w "$1 %{http_code}\n" -X DELETE "$SUPABASE_URL/rest/v1/$1?$2" \
   -H "apikey: $SUPABASE_SECRET_KEY" -H "Authorization: Bearer $SUPABASE_SECRET_KEY"; }
 del jace_message_links "jace_id=not.is.null"
+del jace_deleted_logins "jace_sub=not.is.null"   # (012) deleted Jace logins
 del channels "id=not.is.null"          # group chats and their messages, Jace group links
 del oauth_requests "state=not.is.null"
 del profiles "uuid=not.is.null"        # people, and everything that's theirs

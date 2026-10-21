@@ -24,17 +24,19 @@ async function as<T>(token: string, path: string, method = "GET"): Promise<T> {
   return d as T;
 }
 
-/** In the Jace bot's answer to "delete my account" (its message has DELETE_MARK). */
-export function DeleteAccountButton() {
+/** In the Jace bot's answer to "delete my account" (its message has DELETE_MARK), or, with now,
+ *  "... ([DELETE-NOW])" (DELETE_NOW_MARK): deleted right away and for good. */
+export function DeleteAccountButton({ now = false }: { now?: boolean }) {
   const [me, setMe] = useState<Me | null>(null);
   return <>
-    <button className="btn danger small" style={{ marginTop: 6 }}
-      onClick={() => api<Me>("/me").then(setMe).catch((e) => alert((e as Error).message))}>🗑 Delete my account…</button>
-    {me && <DeleteAccount me={me} onClose={() => setMe(null)} />}
+    <button className={`btn danger small${now ? " solid-danger" : ""}`} style={{ marginTop: 6 }}
+      onClick={() => api<Me>("/me").then(setMe).catch((e) => alert((e as Error).message))}>
+      🗑 {now ? "Delete my account now…" : "Delete my account…"}</button>
+    {me && <DeleteAccount me={me} now={now} onClose={() => setMe(null)} />}
   </>;
 }
 
-function DeleteAccount({ me, onClose }: { me: Me; onClose: () => void }) {
+function DeleteAccount({ me, now, onClose }: { me: Me; now: boolean; onClose: () => void }) {
   const [step, setStep] = useState<"verify" | "minecraft" | "sure">("verify");
   const [fresh, setFresh] = useState<Fresh | null>(null);
   const [note, setNote] = useState("");
@@ -80,11 +82,18 @@ function DeleteAccount({ me, onClose }: { me: Me; onClose: () => void }) {
     if (!fresh) return;
     setBusy(true); setError(""); deleting = true;
     try {
-      const r = await fetch("/api/v1/me", { method: "DELETE", headers: { Authorization: `Bearer ${fresh.token}` }, cache: "no-store" });
+      const r = await fetch(`/api/v1/me${now ? "?now=1" : ""}`, { method: "DELETE", headers: { Authorization: `Bearer ${fresh.token}` }, cache: "no-store" });
       const text = await r.text();
-      let done: Partial<Recovery> & { error?: string } = {};
+      let done: Partial<Recovery> & { error?: string; deleted_for_good?: boolean } = {};
       try { done = JSON.parse(text); } catch { /* not JSON */ }
       if (!r.ok) throw new Error(done.error ?? `Error ${r.status}`);
+      if (now && done.deleted_for_good) {                  // nothing to keep: say so on the sign-in screen
+        try { sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({ deleted_for_good: true })); } catch { /* */ }
+        forgetAccount(me.uuid);
+        setToken(null);
+        location.href = "/app";
+        return;
+      }
       if (!done.recovery_id || !done.expires_at) {   // never sign out without the recovery ID on screen
         console.error("delete account: unexpected answer", r.status, r.url, text.slice(0, 300));
         throw new Error(`The recovery ID didn't come back (${r.status}). Don't close this - ask for help with Talk to a person.`);
@@ -120,13 +129,16 @@ function DeleteAccount({ me, onClose }: { me: Me; onClose: () => void }) {
           <h2>Are you sure?</h2>
           <p>Your account, <b>{me.display_name || me.name}</b>, will be deleted: you&apos;ll be signed out everywhere, and your friends,
             messages, servers and profile disappear for everyone.</p>
-          <p className="muted small" style={{ margin: 0 }}>You&apos;ll get a recovery ID that brings it all back for 10 days.
-            Servers you own stay up for those 10 days, then they&apos;re deleted too.</p>
+          {now
+            ? <p className="error" style={{ margin: 0 }}><b>Right away and for good:</b> there&apos;s no recovery ID. Everything, including
+                servers you own, is deleted now and can&apos;t come back.</p>
+            : <p className="muted small" style={{ margin: 0 }}>You&apos;ll get a recovery ID that brings it all back for 10 days.
+                Servers you own stay up for those 10 days, then they&apos;re deleted too.</p>}
           {error && <p className="error">{error}</p>}
         </div>
         <div className="modal-foot">
           <button className="btn" onClick={onClose}>No, keep it</button>
-          <button className="btn danger" disabled={busy} onClick={deleteIt}>{busy ? "Deleting…" : "Yes, delete my account"}</button>
+          <button className="btn danger" disabled={busy} onClick={deleteIt}>{busy ? "Deleting…" : now ? "Yes, delete it for good" : "Yes, delete my account"}</button>
         </div>
       </>}
     </Modal>
@@ -135,13 +147,22 @@ function DeleteAccount({ me, onClose }: { me: Me; onClose: () => void }) {
 
 /** On the sign-in screen right after deleting: the recovery ID, once. */
 export function RecoveryNotice() {
-  const [r, setR] = useState<Recovery | null>(null);
+  const [r, setR] = useState<(Recovery & { deleted_for_good?: boolean }) | null>(null);
   useEffect(() => {
-    try { setR(JSON.parse(sessionStorage.getItem(RECOVERY_KEY) ?? "null") as Recovery | null); } catch { /* */ }
+    try { setR(JSON.parse(sessionStorage.getItem(RECOVERY_KEY) ?? "null")); } catch { /* */ }
   }, []);
   const [copied, setCopied] = useState(false);
-  if (!r?.recovery_id) return null;
   const close = () => { try { sessionStorage.removeItem(RECOVERY_KEY); } catch { /* */ } setR(null); };
+  if (r?.deleted_for_good) return (
+    <Modal onClose={close}>
+      <div className="modal-body" style={{ textAlign: "left" }}>
+        <h2>Your account is deleted</h2>
+        <p style={{ margin: 0 }}>It&apos;s gone for good, with everything in it. Thanks for using Jace Social!</p>
+      </div>
+      <div className="modal-foot"><button className="btn primary" onClick={close}>OK</button></div>
+    </Modal>
+  );
+  if (!r?.recovery_id) return null;
   return (
     <Modal onClose={() => {}}>
       <div className="modal-body" style={{ textAlign: "left" }}>

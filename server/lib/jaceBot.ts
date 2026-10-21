@@ -13,7 +13,7 @@ import { JACE } from "./jace";
 import { DM_MAX, splitBody } from "./jaceSyncCore";
 import { ApiError, db, inboxesOf, JACE_BOT, notify, type Profile } from "./server";
 import { ensureJaceBot } from "./bots";
-import { asksToDelete, DELETE_MARK, findRecoveryId, recoverAccount, RECOVER_DAYS } from "./accountDeletion";
+import { asksToDelete, asksToDeleteNow, DELETE_MARK, DELETE_NOW_MARK, findRecoveryId, recoverAccount, RECOVER_DAYS } from "./accountDeletion";
 
 export const WELCOME_NEW = "Welcome to Jace Social! Add your friends and make Jace Social feel like home!";
 export const WELCOME_EXISTING = "This is now the Jace bot! Ask me a question!";
@@ -83,6 +83,13 @@ export function answerLater(p: Profile, text = "") {
     // deleting and recovering your account work whoever has the chat (lib/accountDeletion.ts)
     const recovery = findRecoveryId(text);
     if (recovery) { await botSay(p, await recoverAccount(p, recovery)); return; }
+    if (asksToDeleteNow(text)) {
+      await botSay(p, `I can delete your account **right away and for good**. First you'll sign in again to show it's you, then I'll ask if you're sure.
+
+There's **no recovery ID** this way: your friends, messages, servers you own, profile and settings are deleted at once and can't come back.
+${DELETE_NOW_MARK}`);
+      return;
+    }
     if (asksToDelete(text)) {
       await botSay(p, `I can delete your account. First you'll sign in again to show it's you, then I'll ask if you're sure.
 
