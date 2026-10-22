@@ -49,3 +49,26 @@ export async function jaceUserFromCode(code: string): Promise<JaceUser> {
   return { sub, username: username || "Jace user", picture, banned: d.banned === true, muted: d.muted === true,
            token: String(t.access_token), scope: String(t.scope ?? "") };
 }
+
+export type JaceModeration = { user_id: string; username: string; banned: boolean; ban_reason: string | null; banned_at: string | null; muted: boolean };
+
+/** Jace's moderation API (server to server, with Jace Social's own client id and secret - never a
+ *  person's token). Jace logs every ban and unban with the app's name, and won't ban its staff.
+ *  -> {ok, data} or {ok: false, error}. Callers must check the person asking is allowed first. */
+export async function jaceModeration(action: "ban" | "unban" | "status", jaceUserId: string, reason = ""):
+  Promise<{ ok: true; data: JaceModeration } | { ok: false; status: number; error: string }> {
+  const id = process.env.JACE_OAUTH_CLIENT_ID, secret = process.env.JACE_OAUTH_CLIENT_SECRET;
+  if (!id || !secret) return { ok: false, status: 0, error: "Jace sign-in isn't set up on this server" };
+  try {
+    const r = await fetch(`${JACE}/api/oauth/moderation`, {
+      method: "POST", cache: "no-store", signal: AbortSignal.timeout(15_000),
+      headers: { "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}` },
+      body: JSON.stringify({ action, user_id: jaceUserId, reason }),
+    });
+    const d = await r.json().catch(() => ({})) as JaceModeration & { error_description?: string; error?: string };
+    if (r.ok) return { ok: true, data: d };
+    return { ok: false, status: r.status, error: d.error_description || d.error || `Jace answered ${r.status}` };
+  } catch {
+    return { ok: false, status: 0, error: "Couldn't reach Jace" };
+  }
+}

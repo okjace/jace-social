@@ -36,6 +36,10 @@ Ask the Jace bot to "delete my account". You sign in again to show it's you, and
 
 For **10 days** we keep everything set aside, so your **recovery ID** can bring it back. (End your message with **([DELETE-NOW])** to skip that: everything is deleted at once.) After 10 days your account and everything in it - profile, friends, messages, servers you own, settings - is deleted for good. Files you uploaded may stay in storage a little longer before they're cleaned up.
 
+## Jace ban appeals
+
+If your Jace account is banned or muted and you message Jace Official to appeal, the people who run Jace Official (Jace's owner and admins) can read and answer your appeal in Jace Social, and lift the ban. Jace Social fetches it from Jace only for them, doesn't store it, and never shows it to anyone else.
+
 ## Bans
 
 If you're banned from Jace Social, we keep the ban and its reason so you can't sign in again. If your account is linked to Jace, the ban can also be applied to your Jace account.

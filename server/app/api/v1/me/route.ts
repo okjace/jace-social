@@ -7,6 +7,7 @@
 // DELETE ?now=1: the same, but deleted right away and for good -> {deleted_for_good: true}
 import { connectionInfo } from "@/lib/jaceSync";
 import { deleteAccount } from "@/lib/accountDeletion";
+import { appealsFlag } from "@/lib/appeals";
 import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
   type Profile } from "@/lib/server";
@@ -58,7 +59,8 @@ export const GET = handler(async (req) => {
   const p = await me(req);
   await welcomeOnce(p);                              // the Jace bot's first message to them (lib/jaceBot.ts)
   // Jace-linked people: whether their Jace messages are connected (Settings -> Accounts)
-  return { ...own(p), jace_messages: p.jace_sub ? await connectionInfo(p.uuid) : null, jace_staff: await isJaceStaff(p) };
+  return { ...own(p), jace_messages: p.jace_sub ? await connectionInfo(p.uuid) : null, jace_staff: await isJaceStaff(p),
+    appeals: await appealsFlag(p) };                 // Jace ban appeals inbox: staff | reconnect | none (lib/appeals.ts)
 });
 
 const STATUSES = ["online", "idle", "dnd", "invisible"];

@@ -74,6 +74,7 @@ export type Me = Person & {
   handle_change_at?: string | null;      // when the handle can change again (null: now)
   jace_messages?: JaceMessages | null;   // Jace-linked people: syncing with their Jace messages
   jace_staff?: boolean;                  // runs the official Jace bot (signed in as it, or its owner)
+  appeals?: "staff" | "reconnect" | "none";   // Jace ban appeals inbox (Jace Official's owner and admins)
 };
 /** GET /jace/messages: syncing direct messages and group chats with Jace's (server/lib/jaceSync.ts). */
 export type JaceMessages = {

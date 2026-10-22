@@ -247,6 +247,24 @@ sign-in (the app "joins" server_id from /auth/start with Mojang). If that Minecr
 already uses Jace Social, the two accounts become one, keeping friends and chats from both.
 methods: POST 
 
+## /api/v1/appeals
+Jace ban appeals, for Jace Official's owner and admins only (Jace decides who - lib/appeals.ts).
+GET: {appeals: [{user_id, username, picture, status: banned|muted|active|deleted, ban_reason, banned_at,
+  mute_reason, muted_at, last_message, waiting, unread}]}, newest activity first; {reconnect: true}
+  when their Jace sign-in stopped working. Anyone else: 404, the same as a page that doesn't exist.
+methods: GET 
+
+## /api/v1/appeals/[id]
+One Jace ban appeal (staff only). {id} is the appealing person's Jace user id.
+GET ?since=: {appeal, messages: [{id, from_id, from_name, body, created_at}]}, oldest first. Opening it marks it read.
+POST {body, reply_id}: reply as Jace Official. Send the same reply_id when retrying: Jace skips it.
+methods: GET methods: POST 
+
+## /api/v1/appeals/[id]/decision
+POST {action: "unban", reason?}: lifts the ban on Jace (checked with Jace again first) -> {result}
+POST {action: "keep", body, reply_id}: keeps it - just a reply as Jace Official.
+methods: POST 
+
 ## /api/v1/me/avatar
 POST (body = the image, Content-Type image/png|jpeg|gif|webp - animated too -, up to 4 MB): new profile picture
 DELETE: back to your Minecraft head (or initials)

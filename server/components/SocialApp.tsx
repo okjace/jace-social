@@ -20,6 +20,7 @@ import { nameStyle } from "./Message";
 import { MinecraftDevice } from "./MinecraftDevice";
 import { hasAgreed, LegalDialog } from "./Legal";
 import { isDeletingAccount, RecoveryNotice } from "./DeleteAccount";
+import { Appeals, type AppealRow } from "./Appeals";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
 import { Announcements, BotTag, Docs, JACE_BOT, JaceInbox, JaceTabs, inboxPerson, type InboxEntry } from "./JaceBot";
@@ -34,7 +35,8 @@ type View =
   | { kind: "home" }
   | { kind: "dm"; uuid: string }
   | { kind: "group"; id: string }
-  | { kind: "server"; id: string; channel?: string };
+  | { kind: "server"; id: string; channel?: string }
+  | { kind: "appeals"; user: string | null };
 type ModalState =
   | { kind: "settings"; tab?: SettingsTab } | { kind: "group" } | { kind: "server" } | { kind: "serverSettings"; tab?: "invites" }
   | { kind: "channel"; channel: Channel } | { kind: "status" } | { kind: "welcome" } | { kind: "serverWelcome" } | null;
@@ -65,6 +67,9 @@ export default function SocialApp({ inviteCode }: { inviteCode?: string }) {
   }, [token]);
 
   useEffect(() => { if (me) applySettings(me.settings ?? {}); }, [me?.settings]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Saving your profile answers with your profile only (no appeals / jace_staff / jace_messages):
+  // merge it into what we have instead of losing those.
+  const mergeMe = useCallback((m: Me) => setMe((prev) => (prev && prev.uuid === m.uuid ? { ...prev, ...m } : m)), []);
 
   if (!ready) return null;
   if (!token) return <SignIn error={error} inviteCode={inviteCode} />;
@@ -74,9 +79,9 @@ export default function SocialApp({ inviteCode }: { inviteCode?: string }) {
       onTrust={(d) => {
         const trusted = [...new Set([...(me.settings?.trusted_domains ?? []), d])];
         setMe({ ...me, settings: { ...me.settings, trusted_domains: trusted } });
-        void api<Me>("/me", { method: "PATCH", body: { settings: { trusted_domains: trusted } } }).then(setMe).catch(() => {});
+        void api<Me>("/me", { method: "PATCH", body: { settings: { trusted_domains: trusted } } }).then(mergeMe).catch(() => {});
       }}>
-      <Main me={me} setMe={setMe} inviteCode={inviteCode}
+      <Main me={me} setMe={mergeMe} inviteCode={inviteCode}
         signOut={async () => { await api("/auth/signout", { body: {} }).catch(() => {}); setToken(null); setTok(null); setMe(null); }} />
     </LinkGuard>
   );
@@ -154,6 +159,9 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const [groups, setGroups] = useState<Group[]>([]);
   const [jaceTab, setJaceTab] = useState<"chat" | "announcements" | "docs">("chat");
   const [jaceInbox, setJaceInbox] = useState<InboxEntry[]>([]);
+  const [appealsUnread, setAppealsUnread] = useState(0);
+  const [appealsRefresh, setAppealsRefresh] = useState(0);
+  const appealsOn = !!me.appeals && me.appeals !== "none";
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [detail, setDetail] = useState<ServerDetail | null>(null);
   const [reload, setReload] = useState(0);              // bump to reload the open chat
@@ -177,7 +185,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const meRef = useRef(me);
   meRef.current = me;
   /** Pop-up + sound, following your settings (Do Not Disturb, mentions only, muted chats). */
-  const notifyUser = useCallback((title: string, body: string, opts: { important?: boolean; muteKey?: string[] } = {}) => {
+  const notifyUser = useCallback((title: string, body: string, opts: { important?: boolean; muteKey?: string[]; onClick?: () => void } = {}) => {
     const s = settingsRef.current;
     if (meRef.current.status === "dnd" || s.notify === "none") return;
     if (s.notify === "mentions" && !opts.important) return;
@@ -187,7 +195,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
     if (s.desktop_notifications === false) return;
     const d = desktop();
     if (d) d.notify(title, body);
-    else if ("Notification" in window && Notification.permission === "granted") new Notification(title, { body });
+    else if ("Notification" in window && Notification.permission === "granted") {
+      const n = new Notification(title, { body });
+      if (opts.onClick) n.onclick = () => { window.focus(); opts.onClick!(); n.close(); };
+    }
   }, []);
   const [calls] = useState(() => new Calls(err, (name) => notifyUser(`${name} is calling`, "Open Jace Social to answer", { important: true })));
   const call = useCall(calls);
@@ -216,6 +227,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
     void api<{ people: InboxEntry[] }>("/jace-bot/inbox").then((d) => setJaceInbox(d.people)).catch(() => {});
   }, [me.uuid]);
   useEffect(() => { loadInbox(); }, [loadInbox]);
+  useEffect(() => {                                     // the Appeals unread count (staff only)
+    if (!appealsOn) return;
+    api<{ appeals: AppealRow[] }>("/appeals").then((r) => setAppealsUnread(r.appeals.filter((x) => x.unread).length)).catch(() => {});
+  }, [appealsOn]);
   const loadGroups = useCallback(() => api<{ groups: Group[] }>("/groups").then((d) => setGroups(d.groups)).catch((e) => err(e.message)), [err]);
   const loadServers = useCallback(() => api<{ servers: ServerItem[] }>("/servers").then((d) => setServers(d.servers)).catch((e) => err(e.message)), [err]);
   const loadDetail = useCallback(async (id: string) => {
@@ -302,6 +317,13 @@ function Main({ me, setMe, signOut, inviteCode }: {
       } else if (event === "jace_support") {          // someone asked the Jace bot for a person
         loadInbox();
         notifyUser(`${p.name ?? "Someone"} wants a person`, "In the Jace inbox", { important: true });
+      } else if (event === "appeal") {                // Jace ban appeals (lib/appeals.ts): only staff get these
+        setAppealsRefresh((n) => n + 1);
+        notifyUser(p.first ? `New appeal from @${p.username}` : `@${p.username} replied to their appeal`, "In Appeals",
+          { important: true, onClick: () => { setView({ kind: "appeals", user: p.user_id }); setMobileMain(true); } });
+        if (viewRef.current.kind !== "appeals") setAppealsUnread((n) => n + 1);
+      } else if (event === "appeals_access") {
+        void api<Me>("/me").then(setMe).catch(() => {});
       } else if (event === "groups") {
         void loadGroups();
       } else if (event === "servers") {
@@ -509,6 +531,13 @@ function Main({ me, setMe, signOut, inviteCode }: {
               <span style={{ width: 32, textAlign: "center" }}>👥</span><span className="name">Friends</span>
               {friends.incoming.length > 0 && <span className="badge">{friends.incoming.length}</span>}
             </button>
+            {appealsOn && (
+              <button className={`side-item${view.kind === "appeals" ? " active" : ""}${appealsUnread ? " unread" : ""}`}
+                onClick={() => go({ kind: "appeals", user: null })}>
+                <span style={{ width: 32, textAlign: "center" }}>⚖️</span><span className="name">Appeals<span className="sub">Jace bans and mutes</span></span>
+                {appealsUnread > 0 && <span className="badge">{appealsUnread}</span>}
+              </button>
+            )}
             <div className="side-label">Group chats
               <button className="icon-btn" title="New group chat" onClick={() => setModal({ kind: "group" })}>＋</button></div>
             {groups.length === 0 && <p className="muted small" style={{ margin: "0 8px" }}>None yet</p>}
@@ -572,6 +601,9 @@ function Main({ me, setMe, signOut, inviteCode }: {
 
       {/* main */}
       <main className="main">
+        {view.kind === "appeals" && appealsOn && <Appeals open={view.user} onOpen={(u) => setView({ kind: "appeals", user: u })}
+          refresh={appealsRefresh} onUnread={setAppealsUnread} onError={err} back={() => setMobileMain(false)}
+          onReconnected={() => void api<Me>("/me").then(setMe).catch(() => {})} />}
         {view.kind === "home" && <FriendsHome data={friends} reload={loadFriends} onError={err}
           onOpen={(p) => setProfile(p.uuid)} onMessage={(p) => go({ kind: "dm", uuid: p.uuid })}
           onCall={Calls.supported() && call.state === "idle" ? (p) => void calls.call(p.uuid, p.name) : undefined} back={() => setMobileMain(false)} />}

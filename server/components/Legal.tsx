@@ -18,7 +18,7 @@ const cache: Partial<Record<LegalId, string>> = {};
 const mentions = { people: {}, roles: [] };
 
 /** Bump when the Terms or Privacy Policy change, so people see the popup again before signing in. */
-const AGREED_KEY = "jace_social_legal_2026_10_21c";
+const AGREED_KEY = "jace_social_legal_2026_10_22";
 export function hasAgreed() { try { return localStorage.getItem(AGREED_KEY) === "1"; } catch { return false; } }
 function rememberAgreed() { try { localStorage.setItem(AGREED_KEY, "1"); } catch { /* private window: ask again next time */ } }
 

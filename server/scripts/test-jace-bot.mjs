@@ -129,13 +129,13 @@ assert.equal((await api(bot, "/jace-bot/ban", { body: { uuid: alice.uuid }, allo
 const banned = await api(bot, "/jace-bot/ban", { body: { uuid: bob.uuid, reason: "spam", jace: true } });
 assert.equal(banned.banned, true);
 assert.equal(banned.jace_banned, true);
-assert.deepEqual((await mock("state")).banned, ["bob"]);
+assert.ok((await mock("state")).banned.includes("bob"), "bob is banned on Jace too");
 assert.equal((await api(bob.token, "/me", { allowError: true })).status, 401, "signed out everywhere");
 const again = await signIn("bob");
 assert.ok(again.status === 400 || /banned/i.test(again.error ?? ""), "can't sign in again");
 assert.equal((await api(alice.token, `/users/${bob.uuid}`)).banned, true);
 await api(bot, `/jace-bot/ban?uuid=${bob.uuid}&jace=1`, { method: "DELETE" });
-assert.deepEqual((await mock("state")).banned, []);
+assert.ok(!(await mock("state")).banned.includes("bob"), "and unbanned there");
 const back = await signIn("bob");
 assert.ok(back.token, "can sign in after the unban");
 

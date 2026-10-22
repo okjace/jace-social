@@ -14,6 +14,10 @@
 //   POST /mock/mode {user, mode: ok|banned|muted|revoked}
 //   POST /mock/fail {times}                           the next POSTs answer 503 (to test retries)
 //   GET  /mock/state                                  everything stored, and the external ids seen
+//   POST /mock/appeal {from, body}                    an appeal message to Jace Official (lib/appeals.ts)
+//
+// Ban appeals: okjace owns Jace Official (only staff get /api/oauth/appeals); dave is banned and erin
+// is muted, and both have written to Jace Official. alice is not staff.
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -22,7 +26,14 @@ const users = {
   alice: { sub: "u-alice", username: "alice", picture: null, banned: false, muted: false, revoked: false },
   bob: { sub: "u-bob", username: "bob", picture: null, banned: false, muted: false, revoked: false },
   carol: { sub: "u-carol", username: "carol", picture: null, banned: false, muted: false, revoked: false },
+  okjace: { sub: "406a853a-e639-468e-97c8-0794458d909a", username: "okjace", picture: null, banned: false, muted: false, revoked: false },
+  dave: { sub: "u-dave", username: "dave", picture: null, banned: true, muted: false, revoked: false,
+    ban_reason: "Spamming links", banned_at: "2026-10-01T08:00:00.000Z" },
+  erin: { sub: "u-erin", username: "erin", picture: null, banned: false, muted: true, revoked: false,
+    mute_reason: "Rude in comments", muted_at: "2026-10-05T08:00:00.000Z" },
 };
+const OFFICIAL = { sub: "org-jace-official", username: "Jace Official" };
+const staff = new Set([users.okjace.sub]);            // Jace Official's owner (and admins)
 const bySub = (sub) => Object.values(users).find((u) => u.sub === sub);
 let signInAs = process.env.MOCK_USER || "alice";
 let failPosts = 0;
@@ -41,6 +52,15 @@ const gms = [
   { id: "gm-1", group_id: "g-1", from_id: "u-carol", from_name: "carol", body: "welcome to the build crew", created_at: t("2025-02-01T12:01:00Z") },
   { id: "gm-2", group_id: "g-1", from_id: "u-bob", from_name: "bob", body: "thanks carol", created_at: t("2025-02-01T12:02:00Z") },
 ];
+/** appeal messages between someone and Jace Official: {id, from_id, from_name, to_id, body, created_at} */
+const appeals = [
+  { id: "a-1", from_id: "u-dave", from_name: "dave", to_id: OFFICIAL.sub, body: "I wasn't spamming, those were my own videos", created_at: t("2026-10-02T09:00:00Z") },
+  { id: "a-2", from_id: "u-erin", from_name: "erin", to_id: OFFICIAL.sub, body: "Sorry about the comments, can I be unmuted?", created_at: t("2026-10-06T09:00:00Z") },
+];
+const appealStatus = (u) => (!u ? "deleted" : u.banned ? "banned" : u.muted ? "muted" : "active");
+const appealPerson = (u) => ({ user_id: u.sub, username: u.username, picture: u.picture, status: appealStatus(u),
+  ban_reason: u.banned ? u.ban_reason ?? null : null, banned_at: u.banned ? u.banned_at ?? null : null,
+  mute_reason: u.muted ? u.mute_reason ?? null : null, muted_at: u.muted ? u.muted_at ?? null : null });
 const externalIds = new Map();        // client_id:external_id -> stored id
 const codes = new Map();              // code -> {user, client_id}
 const tokens = new Map();             // token -> {user, client_id, scope}
@@ -97,7 +117,12 @@ createServer(async (req, res) => {
       else dms.push({ id: `m-${randomUUID()}`, from_id: u.sub, from_name: u.username, to_id: users[b.to].sub, body: b.body, created_at: at });
       return json(res, 200, { ok: true });
     }
-    if (path === "/mock/state") return json(res, 200, { dms, gms, groups, external_ids: Object.fromEntries(externalIds), moderation: moderationLog,
+    if (path === "/mock/appeal") {
+      const u = users[b.from];
+      appeals.push({ id: `a-${randomUUID()}`, from_id: u.sub, from_name: u.username, to_id: OFFICIAL.sub, body: b.body, created_at: new Date().toISOString() });
+      return json(res, 200, { ok: true });
+    }
+    if (path === "/mock/state") return json(res, 200, { dms, gms, groups, appeals, external_ids: Object.fromEntries(externalIds), moderation: moderationLog,
       banned: Object.values(users).filter((u) => u.banned).map((u) => u.username) });
     return json(res, 404, { error: "not_found" });
   }
@@ -131,10 +156,11 @@ createServer(async (req, res) => {
     const b = JSON.parse((await readBody(req)) || "{}");
     const u = bySub(b.user_id) ?? users[b.username];
     if (!u) return json(res, 404, { error: "not_found" });
-    if (b.action === "ban") u.banned = true;
-    if (b.action === "unban") u.banned = false;
-    moderationLog.push({ action: b.action, user: u.username, reason: b.reason ?? "" });
-    return json(res, 200, { user_id: u.sub, username: u.username, banned: u.banned, ban_reason: b.reason ?? null, muted: u.muted });
+    if (b.action === "ban" && staff.has(u.sub)) return json(res, 403, { error: "forbidden", error_description: "Staff accounts can't be banned" });
+    if (b.action === "ban") { u.banned = true; u.ban_reason = b.reason ?? null; u.banned_at = new Date().toISOString(); }
+    if (b.action === "unban") { u.banned = false; u.ban_reason = null; u.banned_at = null; }
+    if (b.action !== "status") moderationLog.push({ action: b.action, user: u.username, reason: b.reason ?? "" });
+    return json(res, 200, { user_id: u.sub, username: u.username, banned: u.banned, ban_reason: u.ban_reason ?? null, banned_at: u.banned_at ?? null, muted: u.muted });
   }
 
   // --- everything else needs a token
@@ -146,6 +172,27 @@ createServer(async (req, res) => {
   if (path === "/api/oauth/userinfo") {
     return json(res, 200, { sub: me.sub, preferred_username: me.username, picture: me.picture, banned: me.banned, muted: me.muted });
   }
+  // --- ban appeals: only Jace Official's owner and admins
+  if (path.startsWith("/api/oauth/appeals")) {
+    if (!/\bmessages\b/.test(session.scope)) return json(res, 403, { error: "insufficient_scope" });
+    if (!staff.has(me.sub)) return json(res, 403, { error: "forbidden" });
+    const threadOf = (sub) => appeals.filter((m) => m.from_id === sub || m.to_id === sub).sort(byTime);
+    if (path === "/api/oauth/appeals" && req.method === "GET") {
+      const people = [...new Set(appeals.filter((m) => m.from_id !== OFFICIAL.sub).map((m) => m.from_id))];
+      const list = people.map((sub) => ({ ...appealPerson(bySub(sub)), last_message: threadOf(sub).at(-1) }))
+        .sort((a, b) => b.last_message.created_at.localeCompare(a.last_message.created_at));
+      return json(res, 200, { appeals: list });
+    }
+    const one = path.match(/^\/api\/oauth\/appeals\/([^/]+)$/);
+    const u = one && bySub(decodeURIComponent(one[1]));
+    if (!u || !threadOf(u.sub).length) return json(res, 404, { error: "not_found" });
+    if (req.method === "GET") return json(res, 200, { ...appealPerson(u), messages: after(threadOf(u.sub), url.searchParams.get("since")) });
+    if (failPosts > 0) { failPosts--; return json(res, 503, { error: "temporarily_unavailable" }); }
+    const [status, out] = importMessages(me, session.client_id, JSON.parse((await readBody(req)) || "{}"),
+      (id, body, created_at) => appeals.push({ id, from_id: OFFICIAL.sub, from_name: OFFICIAL.username, to_id: u.sub, body, created_at }));
+    return json(res, status, out);
+  }
+
   if (!path.startsWith("/api/oauth/messages")) return json(res, 404, { error: "not_found" });
   if (!/\bmessages\b/.test(session.scope)) return json(res, 403, { error: "insufficient_scope" });
   if (me.banned) return json(res, 403, { error: "account_banned" });
@@ -161,12 +208,16 @@ createServer(async (req, res) => {
       const other = m.from_id === me.sub ? m.to_id : m.from_id;
       partners.set(other, m);                        // the newest wins (sorted oldest first)
     }
+    const mine = appeals.filter((m) => m.from_id === me.sub || m.to_id === me.sub).sort(byTime);
+    if (mine.length) partners.set(OFFICIAL.sub, mine.at(-1));    // the appeal, as Jace shows it
     return json(res, 200, {
-      direct: [...partners].map(([user_id, last]) => ({ user_id, username: bySub(user_id)?.username ?? "?", last_message: last })),
+      direct: [...partners].map(([user_id, last]) => ({ user_id, username: user_id === OFFICIAL.sub ? OFFICIAL.username : bySub(user_id)?.username ?? "?", last_message: last })),
       groups: groups.filter((g) => g.member_ids.includes(me.sub)),
     });
   }
   const dm = path.match(/^\/api\/oauth\/messages\/dm\/([^/]+)$/);
+  if (dm && decodeURIComponent(dm[1]) === OFFICIAL.sub && req.method === "GET")
+    return json(res, 200, { messages: appeals.filter((m) => m.from_id === me.sub || m.to_id === me.sub).sort(byTime) });
   if (dm) {
     const other = bySub(decodeURIComponent(dm[1]));
     if (!other || other.sub === me.sub) return json(res, 404, { error: "not_found" });

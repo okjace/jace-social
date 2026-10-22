@@ -15,7 +15,7 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 
 1. **Supabase:** create a free project at <https://supabase.com>.
    - **Security options when creating the project:** Data API **on**, "Automatically expose new tables" **off**, automatic RLS **on**.
-   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace), `supabase/008_jace_bot.sql` (the official Jace bot), `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones) `supabase/010_account_deletion.sql` (deleting your account through the Jace bot, recoverable for 10 days) and `supabase/011_deleted_handle.sql` (deleting frees your @handle) and `supabase/012_deleted_logins.sql` (remembers deleted Jace logins for good; "([DELETE-NOW])"). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
+   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace), `supabase/008_jace_bot.sql` (the official Jace bot), `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones) `supabase/010_account_deletion.sql` (deleting your account through the Jace bot, recoverable for 10 days) and `supabase/011_deleted_handle.sql` (deleting frees your @handle) and `supabase/012_deleted_logins.sql` (remembers deleted Jace logins for good; "([DELETE-NOW])") and `supabase/013_jace_appeals.sql` (Jace ban appeals). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
    - **Realtime → Settings:** make sure public channel access is allowed (it's the default).
    - **Project Settings → API Keys:** copy the project URL, the **publishable** key and the **secret** key.
 2. **Vercel:** New Project, then import `okjace/jace-social`.
@@ -29,6 +29,23 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
      `openssl rand -base64 32`) and `CRON_SECRET` (any long random text; also add it as the
      `CRON_SECRET` secret on GitHub, which runs the sync every 5 minutes).
    - Deploy.
+
+## Jace ban appeals
+
+A muted or banned Jace account can only message the **Jace Official** organization. Its owner (@okjace)
+and admins see those appeals in an **Appeals** inbox here (⚖️ in the sidebar), reply as Jace Official,
+and Unban or Keep banned. See `lib/appeals.ts`; test: `scripts/test-appeals.mjs`.
+
+- **Who:** Jace decides - `GET /api/oauth/appeals` with the person's own stored Jace token answers 200
+  only for Jace Official's staff. Nothing is hard-coded here; the answer is cached a few minutes
+  (`jace_appeal_staff`). Everyone else gets a 404 and never learns an appeal exists.
+- **Private:** appeals are fetched live with the staff member's token and never stored or copied
+  into chats (the message sync skips the Jace Official thread; set `JACE_OFFICIAL_USER_ID` if its
+  name ever changes). Only "seen" times are kept (`jace_appeal_seen`).
+- **Unban** uses Jace's moderation API with this app's secret, so it's only called right after the
+  clicker's own token passed the appeals check again. Mutes can only be lifted on Jace.
+- **Notifications:** the 5-minute cron run polls each staff member's appeals and sends one `appeal`
+  event per new message from an appealing person.
 
 ## The official Jace bot
 

@@ -67,6 +67,16 @@ async function connection(uuid: string): Promise<Connection | null> {
   return data as Connection | null;
 }
 
+/** This person's stored Jace access token (decrypted, server only), or null. Kept from signing in with
+ *  Jace even while message syncing is off - Jace ban appeals (lib/appeals.ts) use it too. */
+export async function jaceTokenOf(uuid: string): Promise<string | null> {
+  return tokenOf(await connection(uuid));
+}
+
+/** The Jace Official organization's thread (ban appeals): never synced into normal chats. */
+export const isJaceOfficial = (userId: string, username?: string | null) =>
+  (!!process.env.JACE_OFFICIAL_USER_ID && userId === process.env.JACE_OFFICIAL_USER_ID) || /^jace official$/i.test((username ?? "").trim());
+
 function tokenOf(c: Connection | null): string | null {
   const key = tokenKey();
   if (!c?.token_enc || !key) return null;
@@ -219,6 +229,7 @@ export async function syncPerson(uuid: string): Promise<Stats & { skipped?: stri
       const since = cursors.get(key) ?? floor;
       if (since && d.last_message && new Date(d.last_message.created_at) <= new Date(since)) continue;   // nothing new
       if (since && !d.last_message) continue;
+      if (isJaceOfficial(d.user_id, d.username)) continue;   // appeals live only in the Appeals inbox (lib/appeals.ts)
       const partner = await profileForJace(d.user_id, d.username, cache);
       if (partner.uuid === me.uuid) continue;
       // ...and the same when the other person deleted theirs: nothing from before comes to their new account

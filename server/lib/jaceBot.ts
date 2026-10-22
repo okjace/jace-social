@@ -9,7 +9,7 @@
 //   - it can ban people from Jace Social, and their linked Jace account too
 //   - everyone gets one message from it: a welcome for new accounts, an introduction for others
 import { after } from "next/server";
-import { JACE } from "./jace";
+import { jaceModeration } from "./jace";
 import { DM_MAX, splitBody } from "./jaceSyncCore";
 import { ApiError, db, inboxesOf, JACE_BOT, notify, type Profile } from "./server";
 import { ensureJaceBot } from "./bots";
@@ -261,20 +261,8 @@ export async function announce(body: string) {
 
 /** Jace's moderation API, as Jace Social (an official Jace app, signed with its client id and secret). */
 async function jaceModerate(action: "ban" | "unban", jaceUserId: string, reason: string) {
-  const id = process.env.JACE_OAUTH_CLIENT_ID, secret = process.env.JACE_OAUTH_CLIENT_SECRET;
-  if (!id || !secret) return "Jace sign-in isn't set up on this server";
-  try {
-    const r = await fetch(`${JACE}/api/oauth/moderation`, {
-      method: "POST", signal: AbortSignal.timeout(15_000),
-      headers: { "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}` },
-      body: JSON.stringify({ action, user_id: jaceUserId, reason }),
-    });
-    if (r.ok) return null;
-    const d = await r.json().catch(() => ({})) as { error_description?: string; error?: string };
-    return d.error_description || d.error || `Jace answered ${r.status}`;
-  } catch {
-    return "Couldn't reach Jace";
-  }
+  const r = await jaceModeration(action, jaceUserId, reason);
+  return r.ok ? null : r.error;
 }
 
 /** Ban someone from Jace Social (and, if asked and they have one, their Jace account). */
