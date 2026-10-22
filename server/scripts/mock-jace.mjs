@@ -122,7 +122,7 @@ createServer(async (req, res) => {
       appeals.push({ id: `a-${randomUUID()}`, from_id: u.sub, from_name: u.username, to_id: OFFICIAL.sub, body: b.body, created_at: new Date().toISOString() });
       return json(res, 200, { ok: true });
     }
-    if (path === "/mock/state") return json(res, 200, { dms, gms, groups, appeals, external_ids: Object.fromEntries(externalIds), moderation: moderationLog,
+    if (path === "/mock/state") return json(res, 200, { users: Object.fromEntries(Object.entries(users).map(([k, u]) => [k, { username: u.username, picture: u.picture }])), dms, gms, groups, appeals, external_ids: Object.fromEntries(externalIds), moderation: moderationLog,
       banned: Object.values(users).filter((u) => u.banned).map((u) => u.username) });
     return json(res, 404, { error: "not_found" });
   }
@@ -170,7 +170,24 @@ createServer(async (req, res) => {
   const me = session && users[session.user];
   if (!me || me.revoked) return json(res, 401, { error: "invalid_token" });
   if (path === "/api/oauth/userinfo") {
-    return json(res, 200, { sub: me.sub, preferred_username: me.username, picture: me.picture, banned: me.banned, muted: me.muted });
+    return json(res, 200, { sub: me.sub, preferred_username: me.username, username: me.username, picture: me.picture,
+      banned: me.banned, muted: me.muted, is_admin: staff.has(me.sub) });
+  }
+  // --- changing your username and picture (official apps; lib/jaceAdmin.ts)
+  if (path === "/api/oauth/profile" && req.method === "POST") {
+    if (me.banned) return json(res, 403, { error: "account_banned" });
+    const b = JSON.parse((await readBody(req)) || "{}");
+    if (b.username !== undefined) {
+      if (!/^[A-Za-z0-9_]{3,20}$/.test(String(b.username))) return json(res, 400, { error: "invalid_request", error_description: "Usernames are 3-20 letters, numbers and _" });
+      const taken = Object.values(users).some((u) => u !== me && u.username.toLowerCase() === String(b.username).toLowerCase());
+      if (taken) return json(res, 409, { error: "username_taken" });
+      me.username = String(b.username);
+    }
+    if (b.picture !== undefined) {
+      if (b.picture !== null && !/^https?:\/\//.test(String(b.picture))) return json(res, 400, { error: "invalid_request", error_description: "picture must be an https URL" });
+      me.picture = b.picture;
+    }
+    return json(res, 200, { sub: me.sub, username: me.username, name: me.username, picture: me.picture, banned: me.banned, muted: me.muted });
   }
   // --- ban appeals: only Jace Official's owner and admins
   if (path.startsWith("/api/oauth/appeals")) {

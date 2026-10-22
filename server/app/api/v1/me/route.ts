@@ -8,6 +8,7 @@
 import { connectionInfo } from "@/lib/jaceSync";
 import { deleteAccount } from "@/lib/accountDeletion";
 import { appealsFlag } from "@/lib/appeals";
+import { pushProfileToJace } from "@/lib/jaceAdmin";
 import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
   type Profile } from "@/lib/server";
@@ -128,6 +129,7 @@ export const PATCH = handler(async (req) => {
   if (error) throw error;
   const friends = await friendsOf(p.uuid);
   await notify(friends.map((f) => f.inbox), "presence", { uuid: p.uuid });
+  if (patch.handle) pushProfileToJace(p, { handle: patch.handle as string });   // your Jace username follows (lib/jaceAdmin.ts)
   return own(data as Profile);
 });
 

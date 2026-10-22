@@ -15,7 +15,7 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 
 1. **Supabase:** create a free project at <https://supabase.com>.
    - **Security options when creating the project:** Data API **on**, "Automatically expose new tables" **off**, automatic RLS **on**.
-   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace), `supabase/008_jace_bot.sql` (the official Jace bot), `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones) `supabase/010_account_deletion.sql` (deleting your account through the Jace bot, recoverable for 10 days) and `supabase/011_deleted_handle.sql` (deleting frees your @handle) and `supabase/012_deleted_logins.sql` (remembers deleted Jace logins for good; "([DELETE-NOW])") and `supabase/013_jace_appeals.sql` (Jace ban appeals). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
+   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace), `supabase/008_jace_bot.sql` (the official Jace bot), `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones) `supabase/010_account_deletion.sql` (deleting your account through the Jace bot, recoverable for 10 days) and `supabase/011_deleted_handle.sql` (deleting frees your @handle) and `supabase/012_deleted_logins.sql` (remembers deleted Jace logins for good; "([DELETE-NOW])") `supabase/013_jace_appeals.sql` (Jace ban appeals) and `supabase/014_jace_admins.sql` (Jace admins are admins here). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
    - **Realtime → Settings:** make sure public channel access is allowed (it's the default).
    - **Project Settings → API Keys:** copy the project URL, the **publishable** key and the **secret** key.
 2. **Vercel:** New Project, then import `okjace/jace-social`.
@@ -46,6 +46,15 @@ and Unban or Keep banned. See `lib/appeals.ts`; test: `scripts/test-appeals.mjs`
   clicker's own token passed the appeals check again. Mutes can only be lifted on Jace.
 - **Notifications:** the 5-minute cron run polls each staff member's appeals and sends one `appeal`
   event per new message from an appealing person.
+
+## Jace admins and your Jace profile
+
+`lib/jaceAdmin.ts`; test: `scripts/test-jace-profile.mjs`.
+- **Admins:** Jace's own admins (`is_admin` in Jace's userinfo, for official apps) run the official Jace
+  bot like its owner: its Broadcast, Announcements, Docs, inbox (they can switch to it) and bans.
+- **Profile:** changing your @handle changes your Jace username, and your picture your Jace picture
+  (`POST /api/oauth/profile`). Handles with "." can't be Jace usernames, and a name taken on Jace
+  stays as it was there - the person is told.
 
 ## The official Jace bot
 

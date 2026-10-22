@@ -13,6 +13,7 @@ import { jaceModeration } from "./jace";
 import { DM_MAX, splitBody } from "./jaceSyncCore";
 import { ApiError, db, inboxesOf, JACE_BOT, notify, type Profile } from "./server";
 import { ensureJaceBot } from "./bots";
+import { isJaceAdmin } from "./jaceAdmin";
 import { asksToDelete, asksToDeleteNow, DELETE_MARK, DELETE_NOW_MARK, findRecoveryId, recoverAccount, RECOVER_DAYS } from "./accountDeletion";
 
 export const WELCOME_NEW = "Welcome to Jace Social! Add your friends and make Jace Social feel like home!";
@@ -24,8 +25,10 @@ const AI_LIMIT_PER_HOUR = 30;
 /** People who run the Jace bot: anyone signed in as it, and its owner. */
 export async function isJaceStaff(p: Profile) {
   if (p.uuid === JACE_BOT) return true;
+  if (p.is_bot) return false;
   const { data } = await db().from("profiles").select("bot_owner").eq("uuid", JACE_BOT).maybeSingle();
-  return !!data?.bot_owner && data.bot_owner === p.uuid;
+  if (!!data?.bot_owner && data.bot_owner === p.uuid) return true;
+  return isJaceAdmin(p);                                                  // Jace's admins (lib/jaceAdmin.ts)
 }
 
 export async function requireJaceStaff(p: Profile) {

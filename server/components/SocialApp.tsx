@@ -324,6 +324,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
         notifyUser(p.first ? `New appeal from @${p.username}` : `@${p.username} replied to their appeal`, "In Appeals",
           { important: true, onClick: () => { setView({ kind: "appeals", user: p.user_id }); setMobileMain(true); } });
         if (viewRef.current.kind !== "appeals") setAppealsUnread((n) => n + 1);
+      } else if (event === "jace_profile") {          // your handle or picture couldn't go to Jace
+        err(p.message);
       } else if (event === "broadcast_sent") {        // the Broadcast tab: done sending
         err(`Sent to ${p.sent} ${p.sent === 1 ? "person" : "people"}`);
       } else if (event === "appeals_access") {

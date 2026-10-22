@@ -13,7 +13,7 @@ import {
 } from "@/lib/client";
 import { ActivityCard, Avatar, Modal, PersonRow } from "./ui";
 import { Link } from "./Markdown";
-import { BotTag } from "./JaceBot";
+import { BotTag, JACE_BOT } from "./JaceBot";
 import { MemberActions } from "./ServerSettings";
 
 type Err = (m: string) => void;
@@ -530,7 +530,15 @@ export function AccountSwitcher({ me, compact, onError = () => {}, noBack }: { m
   const [list, setList] = useState(savedAccounts());
   const [adding, setAdding] = useState(false);
   const [bots, setBots] = useState<MyBot[]>([]);
-  useEffect(() => { if (!me.is_bot) api<{ bots: MyBot[] }>("/bots").then((r) => setBots(r.bots ?? [])).catch(() => {}); }, [me.is_bot]);
+  useEffect(() => {
+    if (me.is_bot) return;
+    api<{ bots: MyBot[] }>("/bots").then((r) => {
+      const mine = r.bots ?? [];
+      // the people running the official Jace bot (its owner, Jace's admins) can switch to it too
+      setBots(me.jace_staff && !mine.some((b) => b.uuid === JACE_BOT)
+        ? [...mine, { uuid: JACE_BOT, name: "Jace", avatar_url: "/jace-bot.png", official: true }] : mine);
+    }).catch(() => {});
+  }, [me.is_bot, me.jace_staff]);
   const unsavedBots = bots.filter((b) => !list.some((a) => a.uuid === b.uuid));
   return (
     <div className="account-list">
