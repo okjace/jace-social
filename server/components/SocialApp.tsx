@@ -21,9 +21,10 @@ import { MinecraftDevice } from "./MinecraftDevice";
 import { hasAgreed, LegalDialog } from "./Legal";
 import { isDeletingAccount, RecoveryNotice } from "./DeleteAccount";
 import { Appeals, type AppealRow } from "./Appeals";
+import { AddFriendForm } from "./AddFriend";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
-import { Announcements, BotTag, Docs, JACE_BOT, JaceInbox, JaceTabs, inboxPerson, type InboxEntry } from "./JaceBot";
+import { Announcements, BotTag, Broadcast, Docs, JACE_BOT, JaceInbox, JaceTabs, inboxPerson, type InboxEntry, type JaceTab } from "./JaceBot";
 import { AccountSwitcher, AddServerModal, NewGroupModal, ProfileModal, SettingsModal, StatusEditor, type SettingsTab } from "./Modals";
 import { ServerOnboarding, Welcome } from "./Onboarding";
 import { inviteLink, ServerSettings } from "./ServerSettings";
@@ -36,7 +37,8 @@ type View =
   | { kind: "dm"; uuid: string }
   | { kind: "group"; id: string }
   | { kind: "server"; id: string; channel?: string }
-  | { kind: "appeals"; user: string | null };
+  | { kind: "appeals"; user: string | null }
+  | { kind: "broadcast" };
 type ModalState =
   | { kind: "settings"; tab?: SettingsTab } | { kind: "group" } | { kind: "server" } | { kind: "serverSettings"; tab?: "invites" }
   | { kind: "channel"; channel: Channel } | { kind: "status" } | { kind: "welcome" } | { kind: "serverWelcome" } | null;
@@ -157,7 +159,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const [view, setView] = useState<View>({ kind: "home" });
   const [friends, setFriends] = useState<FriendsData>({ friends: [], incoming: [], outgoing: [] });
   const [groups, setGroups] = useState<Group[]>([]);
-  const [jaceTab, setJaceTab] = useState<"chat" | "announcements" | "docs">("chat");
+  const [jaceTab, setJaceTab] = useState<JaceTab>("chat");
   const [jaceInbox, setJaceInbox] = useState<InboxEntry[]>([]);
   const [appealsUnread, setAppealsUnread] = useState(0);
   const [appealsRefresh, setAppealsRefresh] = useState(0);
@@ -322,6 +324,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
         notifyUser(p.first ? `New appeal from @${p.username}` : `@${p.username} replied to their appeal`, "In Appeals",
           { important: true, onClick: () => { setView({ kind: "appeals", user: p.user_id }); setMobileMain(true); } });
         if (viewRef.current.kind !== "appeals") setAppealsUnread((n) => n + 1);
+      } else if (event === "broadcast_sent") {        // the Broadcast tab: done sending
+        err(`Sent to ${p.sent} ${p.sent === 1 ? "person" : "people"}`);
       } else if (event === "appeals_access") {
         void api<Me>("/me").then(setMe).catch(() => {});
       } else if (event === "groups") {
@@ -550,6 +554,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
                 {g.unread > 0 && !muted.includes(g.id) && <span className="badge">{g.unread}</span>}
               </button>
             ))}
+            {me.uuid === JACE_BOT && <button className={`side-item${view.kind === "broadcast" ? " active" : ""}`}
+              onClick={() => go({ kind: "broadcast" })}>
+              <span style={{ width: 32, textAlign: "center" }}>📣</span><span className="name">Broadcast<span className="sub">Send to everyone</span></span>
+            </button>}
             {me.uuid === JACE_BOT && <JaceInbox entries={jaceInbox} active={view.kind === "dm" ? view.uuid : null}
               onOpen={(e) => { go({ kind: "dm", uuid: e.uuid }); }} />}
             {friends.jace && (
@@ -601,6 +609,11 @@ function Main({ me, setMe, signOut, inviteCode }: {
 
       {/* main */}
       <main className="main">
+        {view.kind === "broadcast" && me.jace_staff && <>
+          <div className="main-head"><button className="icon-btn mobile-only" onClick={() => setMobileMain(false)}>‹</button>
+            <span className="title">📣 Broadcast</span><span className="topic">A message from the Jace bot to everyone</span></div>
+          <Broadcast onError={err} />
+        </>}
         {view.kind === "appeals" && appealsOn && <Appeals open={view.user} onOpen={(u) => setView({ kind: "appeals", user: u })}
           refresh={appealsRefresh} onUnread={setAppealsUnread} onError={err} back={() => setMobileMain(false)}
           onReconnected={() => void api<Me>("/me").then(setMe).catch(() => {})} />}
@@ -619,6 +632,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
           {dmPerson.uuid === JACE_BOT && <JaceTabs tab={jaceTab} setTab={setJaceTab} me={me} onError={err} />}
           {dmPerson.uuid === JACE_BOT && jaceTab === "announcements" && <Announcements me={me} onError={err} />}
           {dmPerson.uuid === JACE_BOT && jaceTab === "docs" && <Docs me={me} onError={err} />}
+          {dmPerson.uuid === JACE_BOT && jaceTab === "broadcast" && me.jace_staff && <Broadcast onError={err} />}
           {(dmPerson.uuid !== JACE_BOT || jaceTab === "chat") &&
           <Chat target={{ kind: "dm", uuid: dmPerson.uuid, name: dmPerson.name }} me={me} people={people} reloadKey={reload}
             onOpenProfile={setProfile} onError={err} placeholder={dmPerson.uuid === JACE_BOT ? "Ask me a question" : `Message ${dmPerson.name}`}
@@ -870,8 +884,9 @@ function FriendsHome({ data, reload, onError, onOpen, onMessage, onCall, back }:
   }
   async function search(q: string) {
     setName(q);
-    if (q.trim().length < 2) { setResults([]); return; }
-    try { setResults((await api<{ users: Person[] }>(`/users?q=${encodeURIComponent(q.trim())}`)).users); } catch { setResults([]); }
+    const term = q.trim().replace(/^[#@]/, "");
+    if (term.length < 2) { setResults([]); return; }
+    try { setResults((await api<{ users: Person[] }>(`/users?q=${encodeURIComponent(term)}`)).users); } catch { setResults([]); }
   }
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); reload(); } catch (e) { onError((e as Error).message); } };
 
@@ -890,11 +905,8 @@ function FriendsHome({ data, reload, onError, onOpen, onMessage, onCall, back }:
     <div className="list">
       {tab === "add" && <>
         <h3>Add a friend</h3>
-        <p className="muted small">Type someone's @handle, or their Minecraft username.</p>
-        <form style={{ display: "flex", gap: 8 }} onSubmit={(e) => { e.preventDefault(); if (name.trim()) void add({ name: name.trim() }); }}>
-          <input placeholder="Username" value={name} maxLength={33} onChange={(e) => search(e.target.value)} />
-          <button className="btn primary" disabled={!name.trim()}>Send request</button>
-        </form>
+        <p className="muted small">Start with <b>#</b> for a Minecraft username (#Steve) or <b>@</b> for someone&apos;s handle or Jace account (@steve).</p>
+        <AddFriendForm value={name} onChange={(v) => void search(v)} onSend={(n) => void add({ name: n })} />
         {note && <p className="small" style={{ color: "var(--green)" }}>{note}</p>}
         {results.map((p) => (
           <PersonRow key={p.uuid} p={p} onClick={() => onOpen(p)}><button className="btn small" onClick={() => add({ uuid: p.uuid })}>Add</button></PersonRow>

@@ -4,7 +4,9 @@ import { has, P } from "@/lib/permbits";
 import { useEffect, useState } from "react";
 import { MinecraftDevice } from "./MinecraftDevice";
 import { BotActivity, MyBots } from "./Bots";
-import { addAnotherAccount, forgetAccount, savedAccounts, switchAccount } from "@/lib/accounts";
+import { forgetAccount, rememberAccount, savedAccounts, switchAccount } from "@/lib/accounts";
+import { AddAccountModal } from "./AddAccount";
+import { DeleteAccountCard } from "./DeleteAccount";
 import { ACCENTS, applySettings, cssDisabled, THEME_NAMES } from "@/lib/theme";
 import {
   api, desktopReady, getToken, inDesktop, since, statusLabel, type JaceMessages, type Me, type Person, type Settings, type Status, type DesktopBridge, type ServerDetail,
@@ -117,15 +119,16 @@ function BanButtons({ p, onChanged, onError }: { p: FullProfile; onChanged: () =
 // ---------------------------------------------------------------------------------
 // Your settings: profile, status, linked accounts
 // ---------------------------------------------------------------------------------
-export type SettingsTab = "profile" | "status" | "appearance" | "notifications" | "links" | "accounts" | "bots" | "advanced";
-const TAB_NAMES: [SettingsTab, string][] = [["profile", "My profile"], ["status", "Status"], ["appearance", "Appearance"],
+export type SettingsTab = "bot" | "profile" | "status" | "appearance" | "notifications" | "links" | "accounts" | "bots" | "advanced";
+const TAB_NAMES: [SettingsTab, string][] = [["bot", "Bot"], ["profile", "My profile"], ["status", "Status"], ["appearance", "Appearance"],
   ["notifications", "Notifications"], ["links", "Links & privacy"], ["accounts", "Accounts"], ["bots", "My bots"], ["advanced", "Advanced"]];
 
 export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initialTab, onWelcome }: {
   me: Me; onClose: () => void; onSaved: (m: Me) => void; onSignOut: () => void; onError: Err; initialTab?: SettingsTab;
   onWelcome?: () => void;     // show the first-time walkthrough again
 }) {
-  const [tab, setTab] = useState<SettingsTab>(initialTab ?? "profile");
+  const [tab, setTab] = useState<SettingsTab>(initialTab ?? (me.is_bot ? "bot" : "profile"));
+  const [adding, setAdding] = useState(false);
   const [f, setF] = useState({
     display_name: me.display_name ?? "", handle: me.handle ?? "", pronouns: me.pronouns ?? "", bio: me.bio ?? "",
     accent_color: me.accent_color ?? "#3ddc84", links: me.links.length ? me.links : [{ label: "", url: "" }],
@@ -185,7 +188,7 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
     <Modal onClose={onClose} wide>
       <div className="settings">
         <nav>
-          {TAB_NAMES.filter(([t]) => !(me.is_bot && (t === "bots" || t === "accounts"))).map(([t, label]) => (
+          {TAB_NAMES.filter(([t]) => (me.is_bot ? t !== "bots" : t !== "bot")).map(([t, label]) => (
             <button key={t} className={`side-item${tab === t ? " active" : ""}`} onClick={() => { setTab(t); setNote(""); }}>{label}</button>
           ))}
           {onWelcome && !me.is_bot && <button className="side-item" onClick={onWelcome}>👋 Welcome tour</button>}
@@ -255,11 +258,20 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
           {tab === "appearance" && <AppearanceTab me={me} onSaved={onSaved} onError={onError} />}
           {tab === "notifications" && <NotificationsTab me={me} onSaved={onSaved} onError={onError} />}
           {tab === "links" && <LinksTab me={me} onSaved={onSaved} onError={onError} />}
+          {tab === "bot" && me.is_bot && <>
+            <h2>Bot</h2>
+            <p>You&apos;re signed in as the bot <b>{me.name}</b>. What you send, it sends.</p>
+            <BackToMyAccount me={me} onAdd={() => setAdding(true)} />
+            {adding && <AddAccountModal me={me} onClose={() => setAdding(false)} />}
+            <h2 style={{ marginTop: 8 }}>Switch accounts</h2>
+            <AccountSwitcher me={me} onError={onError} noBack />
+          </>}
           {tab === "bots" && <MyBots onError={onError} />}
           {tab === "advanced" && <AdvancedTab me={me} onSaved={onSaved} onError={onError} />}
           {tab === "accounts" && <>
             <h2>Switch accounts</h2>
-            <AccountSwitcher me={me} />
+            <AccountSwitcher me={me} onError={onError} />
+            {!me.is_bot && <>
             <h2 style={{ marginTop: 8 }}>Linked accounts</h2>
             <p className="muted">Link both to sign in either way. Your friends, chats and servers stay with you.</p>
             <div className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -277,6 +289,8 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
             {linking && <div className="card"><MinecraftDevice mode="link" onCancel={() => setLinking(false)}
               onDone={async () => { setLinking(false); onSaved(await api<Me>("/me")); setNote("Minecraft linked!"); }} /></div>}
             {note && <div className="muted small">{note}</div>}
+            <DeleteAccountCard me={me} />
+            </>}
           </>}
         </div>
       </div>
@@ -491,11 +505,36 @@ export function JaceMessagesCard({ me, onConnect, onError }: { me: Me; onConnect
   );
 }
 
-/** Accounts on this device: switch with one click, add another, or remove one. */
-export function AccountSwitcher({ me, compact }: { me: Me; compact?: boolean }) {
+type MyBot = { uuid: string; name: string; avatar_url: string | null; official?: boolean };
+
+/** Switch to one of your bots: a session for it (kept on this device), then switch. */
+async function switchToBot(b: MyBot, onError: Err) {
+  if (savedAccounts().some((a) => a.uuid === b.uuid)) { switchAccount(b.uuid); return; }
+  try {
+    const s = await api<{ token: string; uuid: string; name: string; avatar_url: string | null }>(`/bots/${b.uuid}/session`, { body: {} });
+    rememberAccount({ uuid: s.uuid, name: s.name, avatar_url: s.avatar_url, is_bot: true }, s.token);
+    switchAccount(s.uuid);
+  } catch (e) { onError((e as Error).message); }
+}
+
+/** Signed in as a bot: back to the account that owns it (saved on this device), or sign in to it. */
+export function BackToMyAccount({ me, onAdd }: { me: Me; onAdd: () => void }) {
+  const owner = savedAccounts().find((a) => a.uuid === me.bot_owner) ?? savedAccounts().find((a) => !a.is_bot);
+  return owner
+    ? <button className="btn primary" onClick={() => switchAccount(owner.uuid)}>← Back to your account ({owner.name})</button>
+    : <button className="btn primary" onClick={onAdd}>← Sign in to your account</button>;
+}
+
+/** Accounts on this device and your bots: switch with one click, add another, or remove one. */
+export function AccountSwitcher({ me, compact, onError = () => {}, noBack }: { me: Me; compact?: boolean; onError?: Err; noBack?: boolean }) {
   const [list, setList] = useState(savedAccounts());
+  const [adding, setAdding] = useState(false);
+  const [bots, setBots] = useState<MyBot[]>([]);
+  useEffect(() => { if (!me.is_bot) api<{ bots: MyBot[] }>("/bots").then((r) => setBots(r.bots ?? [])).catch(() => {}); }, [me.is_bot]);
+  const unsavedBots = bots.filter((b) => !list.some((a) => a.uuid === b.uuid));
   return (
     <div className="account-list">
+      {me.is_bot && !noBack && <BackToMyAccount me={me} onAdd={() => setAdding(true)} />}
       {list.map((a) => (
         <div key={a.uuid} className={`account-row${a.uuid === me.uuid ? " current" : ""}`}>
           <Avatar p={{ name: a.name, avatar_url: a.avatar_url }} size={compact ? 28 : 36} />
@@ -505,7 +544,16 @@ export function AccountSwitcher({ me, compact }: { me: Me; compact?: boolean }) 
           {a.uuid !== me.uuid && <button className="icon-btn" title="Remove from this device" onClick={() => { forgetAccount(a.uuid); setList(savedAccounts()); }}>✕</button>}
         </div>
       ))}
-      <button className="btn small" style={{ justifySelf: "start" }} onClick={addAnotherAccount}>＋ Add an account</button>
+      {unsavedBots.map((b) => (
+        <div key={b.uuid} className="account-row">
+          <Avatar p={b} size={compact ? 28 : 36} />
+          <div className="grow"><b>{b.name}</b><BotTag p={{ is_bot: true, official: b.official, uuid: b.uuid }} style={{ marginLeft: 6 }} />
+            <div className="muted small">Your bot</div></div>
+          <button className="btn small primary" onClick={() => void switchToBot(b, onError)}>Switch</button>
+        </div>
+      ))}
+      <button className="btn small" style={{ justifySelf: "start" }} onClick={() => setAdding(true)}>＋ Add an account</button>
+      {adding && <AddAccountModal me={me} onClose={() => setAdding(false)} />}
     </div>
   );
 }

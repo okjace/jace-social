@@ -541,3 +541,5 @@ select.btn { width: auto; }
 .appeal-reply { padding: 12px 16px; border-top: 1px solid var(--deep); display: grid; gap: 8px; flex: none; }
 .appeal-reply .grow { flex: 1; }
 .appeal-result { font-size: 13px; padding: 6px 10px; border-radius: 8px; background: var(--panel2); }
+.ask-kind { display: grid; gap: 8px; margin-top: 8px; }
+.me-panel .who .bot-tag { display: inline-block; vertical-align: middle; }   /* not a whole line like the status under it */

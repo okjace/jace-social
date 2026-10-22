@@ -180,3 +180,48 @@ export function RecoveryNotice() {
     </Modal>
   );
 }
+
+/** Settings -> Accounts -> Delete account: a box for args. Nothing: delete with the 10 days to recover;
+ *  "([DELETE-NOW])": delete right away and for good; a recovery ID: bring that deleted account back
+ *  into this one. Deleting still signs in again and asks "Are you sure?". */
+export function DeleteAccountCard({ me }: { me: Me }) {
+  const [args, setArgs] = useState("");
+  const [flow, setFlow] = useState<null | "later" | "now">(null);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    const a = args.trim();
+    setNote(""); setError("");
+    if (/^JSR(?:-?[2-9A-HJ-NP-Z]{4}){4}$/i.test(a)) {                 // a recovery ID
+      setBusy(true);
+      try {
+        const r = await api<{ ok: boolean; message: string }>("/me/recover", { body: { recovery_id: a } });
+        if (r.ok) { setNote(r.message); setTimeout(() => location.reload(), 1500); } else setError(r.message);
+      } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+      return;
+    }
+    if (/^\(\s*\[\s*DELETE-NOW\s*\]\s*\)$/i.test(a)) { setFlow("now"); return; }
+    if (!a) { setFlow("later"); return; }
+    setError("Type nothing, ([DELETE-NOW]), or a recovery ID (JSR-…).");
+  }
+  return (
+    <div className="card danger-card" style={{ display: "grid", gap: 8, marginTop: 8 }}>
+      <b>Delete account</b>
+      <label className="small" style={{ textTransform: "none", letterSpacing: 0 }}>Type args
+        <input value={args} maxLength={40} spellCheck={false} placeholder="(optional)" onChange={(e) => setArgs(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void go(); }} />
+      </label>
+      <ul className="muted small" style={{ margin: 0, paddingLeft: 18 }}>
+        <li><b>Nothing</b> - delete it, and get a recovery ID that brings it back for 10 days</li>
+        <li><b>([DELETE-NOW])</b> - delete it right away and for good, with no recovery ID</li>
+        <li><b>A recovery ID</b> (JSR-…) - turn this account back into one you deleted</li>
+      </ul>
+      <button className="btn danger small" style={{ justifySelf: "start" }} disabled={busy} onClick={() => void go()}>
+        {/^JSR/i.test(args.trim()) ? "Recover account" : "Delete account…"}</button>
+      {note && <div className="small" style={{ color: "var(--green)" }}>{note}</div>}
+      {error && <div className="error">{error}</div>}
+      {flow && <DeleteAccount me={me} now={flow === "now"} onClose={() => setFlow(null)} />}
+    </div>
+  );
+}

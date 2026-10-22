@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, type Me, type ServerDetail, type Settings } from "@/lib/client";
 import { ACCENTS, applySettings, THEME_NAMES } from "@/lib/theme";
 import { Markdown } from "./Markdown";
+import { AddFriendForm } from "./AddFriend";
 import { Avatar, Modal } from "./ui";
 
 type Err = (m: string) => void;
@@ -73,16 +74,11 @@ export function Welcome({ me, onDone, onSaved, onError, onJoinServer }: {
         </>}
         {step === 2 && <>
           <h2>Find your friends</h2>
-          <p className="muted" style={{ margin: 0 }}>Type a friend's @handle or Minecraft username to send them a request. It works even if they haven't joined yet.</p>
-          <form style={{ display: "flex", gap: 8 }} onSubmit={async (e) => {
-            e.preventDefault();
-            if (!friend.trim()) return;
-            try { const r = await api<{ friend: { name: string } }>("/friends", { body: { name: friend.trim() } }); setSent([...sent, r.friend.name]); setFriend(""); }
+          <p className="muted" style={{ margin: 0 }}>Type <b>#</b> and a friend&apos;s Minecraft username, or <b>@</b> and their handle or Jace name, to send them a request. It works even if they haven&apos;t joined yet.</p>
+          <AddFriendForm value={friend} onChange={setFriend} onSend={async (n) => {
+            try { const r = await api<{ friend: { name: string } }>("/friends", { body: { name: n } }); setSent([...sent, r.friend.name]); setFriend(""); }
             catch (err) { onError((err as Error).message); }
-          }}>
-            <input value={friend} placeholder="Username" maxLength={33} onChange={(e) => setFriend(e.target.value)} />
-            <button className="btn primary" disabled={!friend.trim()}>Send request</button>
-          </form>
+          }} />
           {sent.map((s) => <div key={s} className="small" style={{ color: "var(--green)" }}>✓ Request sent to {s}</div>)}
         </>}
         {step === 3 && <>

@@ -109,6 +109,19 @@ assert.equal((await api(bob.token, "/jace-bot/announcements")).announcements[0].
 for (const t of [alice.token, bob.token])
   await until("the announcement message", async () => (await chatWithBot(t)).some((m) => m.body === "📢 Jace Social 2.1 is out!"));
 
+step("Broadcast: staff only; a plain message to everyone, not an announcement");
+assert.equal((await api(bob.token, "/jace-bot/broadcast", { body: { body: "nope" }, allowError: true })).status, 403);
+await api(bot, "/jace-bot/broadcast", { body: { body: "Servers restart at 5pm today" } });
+for (const t of [alice.token, bob.token])
+  await until("the broadcast", async () => (await chatWithBot(t)).some((m) => m.body === "Servers restart at 5pm today"));
+assert.ok(!(await api(bob.token, "/jace-bot/announcements")).announcements.some((a) => a.body.includes("5pm")), "not in Announcements");
+
+step("friends: #name is Minecraft only, @name is a handle or Jace name");
+assert.equal((await api(alice.token, "/friends", { body: { name: "#not a name!" }, allowError: true })).status, 400);
+assert.equal((await api(alice.token, "/friends", { body: { name: "@nobody_has_this" }, allowError: true })).status, 404);
+const byHandle = await api(alice.token, "/friends", { body: { name: `@${(await api(bob.token, "/me")).handle}` } });
+assert.equal(byHandle.friend.uuid, bob.uuid);
+
 step("Docs: starter ones for everyone, editable by the bot");
 const docs = (await api(bob.token, "/jace-bot/docs")).docs;
 assert.ok(docs.length >= 10, `${docs.length} starter docs`);

@@ -55,15 +55,21 @@ export async function deleteAccount(p: Profile, req: Request, now = false) {
 
 /** A recovery ID sent to the Jace bot: turn this account back into the deleted one. What to answer. */
 export async function recoverAccount(p: Profile, raw: string): Promise<string> {
-  const { data: dead } = await db().from("profiles").select("uuid, recover_expires_at, display_name, name")
-    .eq("recover_hash", sha256(normalize(raw))).not("deleted_at", "is", null).maybeSingle();
-  if (!dead || new Date(dead.recover_expires_at) < new Date())
-    return "That recovery ID doesn't work. It may be mistyped, already used, or older than 10 days.";
-  if (p.is_bot) return "Bots can't recover accounts.";
+  return (await recover(p, raw)).message;
+}
+
+/** The same, for Settings -> Accounts -> Delete account (POST /api/v1/me/recover) -> {ok, message}. */
+export async function recover(p: Profile, raw: string): Promise<{ ok: boolean; message: string }> {
+  if (p.is_bot) return { ok: false, message: "Bots can't recover accounts." };
+  const id = findRecoveryId(String(raw ?? ""));
+  const { data: dead } = id ? await db().from("profiles").select("uuid, recover_expires_at, display_name, name")
+    .eq("recover_hash", sha256(normalize(id))).not("deleted_at", "is", null).maybeSingle() : { data: null };
+  if (!dead || !dead.recover_expires_at || new Date(dead.recover_expires_at) < new Date())
+    return { ok: false, message: "That recovery ID doesn't work. It may be mistyped, already used, or older than 10 days." };
   const { error } = await db().rpc("recover_account", { dead: dead.uuid, alive: p.uuid });
-  if (error) { console.error("recover account", error); return "Something went wrong recovering it - try again in a minute."; }
+  if (error) { console.error("recover account", error); return { ok: false, message: "Something went wrong recovering it - try again in a minute." }; }
   await notify([p.inbox], "account_recovered", {});               // the app reloads with the old account
-  return `Welcome back, ${dead.display_name || dead.name}! Your account is recovered - friends, messages, servers and settings.`;
+  return { ok: true, message: `Welcome back, ${dead.display_name || dead.name}! Your account is recovered - friends, messages, servers and settings.` };
 }
 
 /** The regular cron run: accounts deleted more than 10 days ago go for good. */

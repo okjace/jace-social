@@ -240,21 +240,42 @@ export async function announce(body: string) {
   const { data: a, error } = await db().from("jace_bot_announcements").insert({ body: text }).select("*").single();
   if (error) throw error;
   after(async () => {
-    let sent = 0;
-    for (let from = 0; ; from += 500) {
-      const { data: people } = await db().from("profiles").select("uuid, inbox").not("signed_up", "is", null)
-        .eq("is_bot", false).is("banned_at", null).order("uuid").range(from, from + 499);
-      if (!people?.length) break;
-      const rows = people.flatMap((p) => splitBody(`📢 ${text}`, DM_MAX).map((part) => ({ sender: JACE_BOT, recipient: p.uuid, body: part })));
-      const { error: e } = await db().from("messages").insert(rows);
-      if (e) { console.error("announce", e.message); break; }
-      await notify(people.map((p) => p.inbox), "message", { from: JACE_BOT, name: "Jace", announcement: true });
-      sent += people.length;
-      if (people.length < 500) break;
-    }
+    const sent = await toEveryone(`📢 ${text}`, true);
     await db().from("jace_bot_announcements").update({ sent_to: sent }).eq("id", a.id);
   });
   return a;
+}
+
+/** Broadcast (its own tab, staff only): a normal message from the Jace bot to everyone - not listed
+ *  in Announcements. Sent after answering; the sender gets "broadcast_sent" with the count. */
+export function broadcast(by: Profile, body: string) {
+  const text = body.trim();
+  if (!text || text.length > 4000) throw new ApiError(400, "Messages are 1 to 4000 characters");
+  after(async () => {
+    const sent = await toEveryone(text, false);
+    await notify([by.inbox], "broadcast_sent", { sent });
+  });
+  return { sending: true };
+}
+
+/** A message from the Jace bot to everyone signed up (not bots, banned or deleted accounts). -> how many */
+async function toEveryone(text: string, announcement: boolean) {
+  let sent = 0;
+  for (let from = 0; ; from += 500) {
+    const { data: people } = await db().from("profiles").select("uuid, inbox, deleted_at").not("signed_up", "is", null)
+      .eq("is_bot", false).is("banned_at", null).order("uuid").range(from, from + 499);
+    if (!people?.length) break;
+    const live = people.filter((p) => !p.deleted_at);
+    const rows = live.flatMap((p) => splitBody(text, DM_MAX).map((part) => ({ sender: JACE_BOT, recipient: p.uuid, body: part })));
+    if (rows.length) {
+      const { error: e } = await db().from("messages").insert(rows);
+      if (e) { console.error("jace bot to everyone", e.message); break; }
+      await notify(live.map((p) => p.inbox), "message", { from: JACE_BOT, name: "Jace", announcement });
+    }
+    sent += live.length;
+    if (people.length < 500) break;
+  }
+  return sent;
 }
 
 // --- bans --------------------------------------------------------------------------------------

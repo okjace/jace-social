@@ -141,6 +141,15 @@ assert.equal(signedInAgain.uuid, again.uuid, "signing in with Jace finds the rec
 step("a recovery ID works only once");
 assert.match((await askBot(again.token, deleted.recovery_id)).body, /doesn't work/);
 
+step("Settings -> Delete account with a recovery ID does the same");
+const viaSettings = await signIn("alice");
+const del3 = await api(viaSettings.token, "/me", { method: "DELETE" });
+const again3 = await signIn("alice");
+assert.equal((await api(again3.token, "/me/recover", { body: { recovery_id: "JSR-2222-3333-4444-5555" } })).ok, false);
+const rec3 = await api(again3.token, "/me/recover", { body: { recovery_id: del3.recovery_id } });
+assert.equal(rec3.ok, true, rec3.message);
+assert.equal((await api(again3.token, "/me")).bio, "I build castles");
+
 step("after 10 days it's gone for good");
 const fresh2 = await signIn("alice");
 const deleted2 = await api(fresh2.token, "/me", { method: "DELETE" });

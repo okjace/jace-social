@@ -1,7 +1,8 @@
 // GET: friends (with online status + what they're doing), incoming and outgoing requests, and
 //   jace: the official Jace bot (everyone can message it), with its unread count
 // POST {name} or {uuid}: send a friend request. name can be a Minecraft username (works even if they
-//   haven't used Jace Social yet), someone's @handle, or a Jace username (write @name to skip Minecraft).
+//   haven't used Jace Social yet), someone's @handle, or a Jace username. "#name" means only Minecraft,
+//   "@name" only a handle or Jace username.
 // DELETE ?uuid=: remove a friend or cancel/decline a request
 import {
   ApiError, body, cleanUuid, db, ensureProfile, friendsOf, handler, JACE_BOT, me, mojangLookup, notify, profileByHandle, publicProfile,
@@ -38,8 +39,16 @@ async function findTarget(b: { name?: string; uuid?: string }): Promise<Profile>
     return data as Profile;
   }
   const raw = String(b.name ?? "").trim();
-  const jaceOnly = raw.startsWith("@") || !/^[A-Za-z0-9_]{1,16}$/.test(raw);
-  const name = raw.replace(/^@/, "");
+  // #name: a Minecraft player; @name: a handle or Jace username (the web app always sends one of the
+  // two); no prefix (the mod and older apps): Minecraft first, then Jace
+  const minecraftOnly = raw.startsWith("#");
+  const jaceOnly = raw.startsWith("@") || (!minecraftOnly && !/^[A-Za-z0-9_]{1,16}$/.test(raw));
+  const name = raw.replace(/^[@#]/, "");
+  if (minecraftOnly) {
+    if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) throw new ApiError(400, "Minecraft names are 1-16 letters, numbers and _");
+    const target = await mojangLookup(name);
+    return await ensureProfile(target.uuid, target.name);
+  }
   if (!name) throw new ApiError(400, "Type a username");
   const jace = async () => {
     const byHandle = await profileByHandle(name);

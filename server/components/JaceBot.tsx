@@ -21,8 +21,10 @@ type Announcement = { id: number; body: string; created_at: string; sent_to: num
 type Doc = { id: string; slug: string; title: string; body: string; position: number; updated_at: string };
 const mentions = { people: {}, roles: [] };
 
+export type JaceTab = "chat" | "announcements" | "docs" | "broadcast";
+
 export function JaceTabs({ tab, setTab, me, onError }: {
-  tab: "chat" | "announcements" | "docs"; setTab: (t: "chat" | "announcements" | "docs") => void; me: Me; onError: (m: string) => void;
+  tab: JaceTab; setTab: (t: JaceTab) => void; me: Me; onError: (m: string) => void;
 }) {
   const [mode, setMode] = useState<"ai" | "human">("ai");
   const [busy, setBusy] = useState(false);
@@ -30,9 +32,9 @@ export function JaceTabs({ tab, setTab, me, onError }: {
   useEffect(() => { if (!isBot) api<{ mode: "ai" | "human" }>("/jace-bot/thread").then((r) => setMode(r.mode)).catch(() => {}); }, [isBot]);
   return (
     <div className="jace-tabs">
-      {(["chat", "announcements", "docs"] as const).map((t) => (
+      {(["chat", "announcements", "docs", ...(me.jace_staff ? ["broadcast" as const] : [])] as const).map((t) => (
         <button key={t} className={`tab${tab === t ? " on" : ""}`} onClick={() => setTab(t)}>
-          {t === "chat" ? "💬 Chat" : t === "announcements" ? "📢 Announcements" : "📖 Docs"}</button>
+          {t === "chat" ? "💬 Chat" : t === "announcements" ? "📢 Announcements" : t === "docs" ? "📖 Docs" : "📣 Broadcast"}</button>
       ))}
       <span className="spacer" />
       {!isBot && tab === "chat" && (
@@ -42,6 +44,31 @@ export function JaceTabs({ tab, setTab, me, onError }: {
           catch (e) { onError((e as Error).message); } finally { setBusy(false); }
         }}>{mode === "ai" ? "🙋 Talk to a person" : "🤖 Back to the AI"}</button>
       )}
+    </div>
+  );
+}
+
+/** Broadcast (the people running the Jace bot): a normal message from the Jace bot to everyone. */
+export function Broadcast({ onError }: { onError: (m: string) => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  return (
+    <div className="jace-pane">
+      <div className="card" style={{ display: "grid", gap: 8 }}>
+        <b>Send to everyone</b>
+        <span className="muted small">A message from the Jace bot in everyone&apos;s chat with it. Unlike an announcement, it isn&apos;t listed in Announcements.</span>
+        <textarea rows={5} maxLength={4000} value={text} placeholder="Write to everyone on Jace Social…" onChange={(e) => setText(e.target.value)} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button className="btn primary small" disabled={busy || !text.trim()} onClick={async () => {
+            if (!confirm("Send this to everyone on Jace Social as a message from the Jace bot?")) return;
+            setBusy(true); setNote("");
+            try { await api("/jace-bot/broadcast", { body: { body: text } }); setText(""); setNote("Sending to everyone…"); }
+            catch (e) { onError((e as Error).message); } finally { setBusy(false); }
+          }}>📣 Send to everyone</button>
+          {note && <span className="muted small">{note}</span>}
+        </div>
+      </div>
     </div>
   );
 }
