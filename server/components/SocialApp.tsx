@@ -175,13 +175,28 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const meRef = useRef(me);
   meRef.current = me;
   /** Pop-up + sound, following your settings (Do Not Disturb, mentions only, muted chats). */
-  const notifyUser = useCallback((title: string, body: string, opts: { important?: boolean; muteKey?: string[]; onClick?: () => void } = {}) => {
+  /** A new message's sound - also while you're in Jace Social, even in that chat (Settings -> Sounds ->
+   *  "Play it": always / except in the chat you're looking at / only when away / never). Do Not
+   *  Disturb, "mentions only" and muted chats keep it quiet. */
+  const messageSound = useCallback((o: { inOpenChat: boolean; important?: boolean; muteKey?: string[] }) => {
+    const s = settingsRef.current;
+    if (s.sounds === false || meRef.current.status === "dnd" || s.notify === "none") return;
+    if (s.notify === "mentions" && !o.important) return;
+    if (o.muteKey?.some((k) => s.muted?.includes(k)) && !o.important) return;
+    const when = s.message_sound_when ?? "always";
+    const here = document.hasFocus() && !document.hidden;
+    if (when === "never" || (when === "away" && here) || (when === "other_chats" && here && o.inOpenChat)) return;
+    playOnce(s.message_sound, "message");
+  }, []);
+  /** Pop-up (when Jace Social isn't the window you're using), following your settings. soundless: the
+   *  caller plays its own sound (messages: messageSound; calls: the ringtone). */
+  const notifyUser = useCallback((title: string, body: string, opts: { important?: boolean; muteKey?: string[]; onClick?: () => void; soundless?: boolean } = {}) => {
     const s = settingsRef.current;
     if (meRef.current.status === "dnd" || s.notify === "none") return;
     if (s.notify === "mentions" && !opts.important) return;
     if (opts.muteKey?.some((k) => s.muted?.includes(k)) && !opts.important) return;
     if (document.hasFocus()) return;
-    if (s.sounds !== false) playOnce(s.message_sound, "message");   // your message sound (Settings -> Sounds)
+    if (s.sounds !== false && !opts.soundless) playOnce(s.message_sound, "message");
     if (s.desktop_notifications === false) return;
     const d = desktop();
     if (d) d.notify(title, body);
@@ -190,7 +205,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
       if (opts.onClick) n.onclick = () => { window.focus(); opts.onClick!(); n.close(); };
     }
   }, []);
-  const [calls] = useState(() => new Calls(err, (name) => notifyUser(`${name} is calling`, "Open Jace Social to answer", { important: true })));
+  const [calls] = useState(() => new Calls(err, (name) => notifyUser(`${name} is calling`, "Open Jace Social to answer", { important: true, soundless: true })));
   const call = useCall(calls);
   // calls ring even when a live event was missed (phones in the background), with your own sounds,
   // and phones are allowed to play them (unlocked on your first tap)
@@ -279,8 +294,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
     return connectLive(me.realtime, me.inbox, (event, p) => {
       const v = viewRef.current;
       if (event === "message") {
-        if (v.kind === "dm" && v.uuid === p.from) setReload((n) => n + 1);
-        else notifyUser(`${p.name ?? "A friend"}`, "Sent you a message", { important: true, muteKey: [p.from] });
+        const inOpenChat = v.kind === "dm" && v.uuid === p.from;
+        if (p.from !== me.uuid) messageSound({ inOpenChat, important: true, muteKey: [p.from] });
+        if (inOpenChat) setReload((n) => n + 1);
+        else notifyUser(`${p.name ?? "A friend"}`, "Sent you a message", { important: true, muteKey: [p.from], soundless: true });
         clearTyping(`dm:${p.from}`, p.from);
         void loadFriends();
         loadInbox();
@@ -293,10 +310,13 @@ function Main({ me, setMe, signOut, inviteCode }: {
         if (!presenceTimer) presenceTimer = setTimeout(() => { presenceTimer = null; void loadFriends(); }, 1500);
       } else if (event === "channel") {
         const open = (v.kind === "group" && v.id === p.channel_id) || (v.kind === "server" && v.channel === p.channel_id);
+        const fresh = !p.edited && !p.deleted && !p.reacted && p.name && p.from !== me.uuid;   // a new message from someone else
+        const muteKey = [p.channel_id, p.server_id].filter(Boolean);
+        if (fresh) messageSound({ inOpenChat: open, important: !!p.mentioned || !p.server_id, muteKey });
         if (open) setReload((n) => n + 1);
-        else if (!p.edited && !p.deleted && !p.reacted && p.name) {
+        else if (fresh) {
           notifyUser(p.name, p.mentioned ? "Mentioned you" : p.server_id ? "New message in a server" : "New message in a group",
-            { important: !!p.mentioned || !p.server_id, muteKey: [p.channel_id, p.server_id].filter(Boolean) });
+            { important: !!p.mentioned || !p.server_id, muteKey, soundless: true });
         }
         if (p.from) clearTyping(`ch:${p.channel_id}`, p.from);
         if (p.server_id) { void loadServers(); if (v.kind === "server" && v.id === p.server_id) refreshDetail(p.server_id); }

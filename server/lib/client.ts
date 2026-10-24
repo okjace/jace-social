@@ -68,6 +68,7 @@ export type Settings = {
   trusted_domains?: string[]; muted?: string[]; time_format?: "12h" | "24h"; send_on_enter?: boolean; developer?: boolean;
   background?: string | null; background_opacity?: number; custom_css?: string;   // Settings -> Appearance
   ringtone?: string | null; calling_sound?: string | null; message_sound?: string | null;   // Settings -> Sounds (lib/sounds.ts)
+  message_sound_when?: "always" | "other_chats" | "away" | "never";
 };
 export type Me = Person & {
   display_name: string | null; minecraft_linked: boolean; jace_linked: boolean; inbox: string;

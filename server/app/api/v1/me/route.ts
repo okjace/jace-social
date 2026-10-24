@@ -61,6 +61,7 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   ringtone: (v) => soundChoice(v),
   calling_sound: (v) => soundChoice(v),
   message_sound: (v) => soundChoice(v),
+  message_sound_when: (v) => (["always", "other_chats", "away", "never"].includes(String(v)) ? v : "always"),
 };
 
 export const GET = handler(async (req) => {

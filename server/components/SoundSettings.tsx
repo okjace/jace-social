@@ -9,7 +9,7 @@ type Sound = { id: string; owner: string; name: string; kind: SoundKind; url: st
 const KINDS: [SoundKind, string, string][] = [
   ["ringtone", "Ringtone", "When someone calls you"],
   ["calling", "Calling sound", "While you're calling someone"],
-  ["message", "Message sound", "When a message, mention or friend request arrives (while Jace Social isn't the window you're using)"],
+  ["message", "Message sound", "When a message or mention arrives"],
 ];
 const settingKey = (k: SoundKind) => ({ ringtone: "ringtone", calling: "calling_sound", message: "message_sound" } as const)[k];
 
@@ -76,6 +76,14 @@ export function SoundSettings({ me, s, set, onError }: {
           <label className="btn small" style={{ justifySelf: "start", margin: 0 }}>⬆ Upload a {kind === "ringtone" ? "ringtone" : kind === "calling" ? "calling sound" : "message sound"}
             <input type="file" hidden accept="audio/mpeg,audio/ogg,audio/wav,audio/x-wav,audio/webm,audio/mp4,audio/aac,audio/x-m4a,.mp3,.ogg,.wav,.m4a,.aac,.webm"
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(kind, f); }} /></label>
+          {kind === "message" && <label className="small" style={{ textTransform: "none", letterSpacing: 0 }}>Play it
+            <select value={s.message_sound_when ?? "always"} onChange={(e) => void set({ message_sound_when: e.target.value as Settings["message_sound_when"] })}>
+              <option value="always">Always - even in the chat I&apos;m looking at</option>
+              <option value="other_chats">Except in the chat I&apos;m looking at</option>
+              <option value="away">Only when Jace Social isn&apos;t the window I&apos;m using</option>
+              <option value="never">Never</option>
+            </select>
+          </label>}
           <span className="muted small">MP3, OGG, WAV or M4A, up to 1 MB. {kind === "message" ? "It plays once - a second or two is best." : "It loops while ringing, so a short clip works best."}</span>
         </div>
       );
