@@ -16,6 +16,8 @@ export const GET = handler(async (req, ctx) => {
     // presence is for friends (and people you share a server with)
     ...(friend || theirs?.length ? {} : { online: false, activity: null, status: "offline", last_seen: null }),
     is_friend: friend && id !== p.uuid, is_you: id === p.uuid,
+    // they let anyone message them (Settings -> Links & privacy), so you can without being friends
+    can_message: id !== p.uuid && !pub.is_bot && (friend || (data as Profile).settings?.open_dms === true),
     mutual_servers: (theirs ?? []).map((t) => t.servers),
   };
 });

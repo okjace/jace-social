@@ -23,13 +23,42 @@ export const GET = handler(async (req) => {
   const unreadBy: Record<string, number> = {};
   for (const m of unread ?? []) unreadBy[m.sender] = (unreadBy[m.sender] ?? 0) + 1;
   const jace = p.uuid === JACE_BOT ? null : { ...publicProfile(await ensureJaceBot()), unread: unreadBy[JACE_BOT] ?? 0 };
+  // chats with people who aren't your friends (they let anyone message them, or you do)
+  const others = p.uuid === JACE_BOT ? [] : await otherChats(p.uuid, new Set(friends.map((f) => f.uuid)), unreadBy);
   return {
     jace,
     friends: friends.filter((f) => f.uuid !== JACE_BOT).map((f) => ({ ...publicProfile(f), unread: unreadBy[f.uuid] ?? 0 })),
+    others,
     incoming: (pending.data ?? []).filter((r) => r.addressee === p.uuid && !(r.a as unknown as Profile)?.deleted_at).map((r) => publicProfile(r.a as unknown as Profile)),
     outgoing: (pending.data ?? []).filter((r) => r.requester === p.uuid && !(r.b as unknown as Profile)?.deleted_at).map((r) => publicProfile(r.b as unknown as Profile)),
   };
 });
+
+/** They may no longer answer each other's messages (lib: app/api/v1/messages/route.ts dm_allow). */
+async function forgetReplies(uuid: string, other: string) {
+  const { data } = await db().from("profiles").select("settings").eq("uuid", uuid).maybeSingle();
+  const s = (data?.settings ?? {}) as { dm_allow?: string[] };
+  if (!s.dm_allow?.includes(other)) return;
+  await db().from("profiles").update({ settings: { ...s, dm_allow: s.dm_allow.filter((x) => x !== other) } }).eq("uuid", uuid);
+}
+
+/** The newest direct-message chats with people who aren't your friends (20 at most). */
+async function otherChats(uuid: string, friends: Set<string>, unreadBy: Record<string, number>) {
+  const { data } = await db().from("messages").select("sender, recipient")
+    .or(`sender.eq.${uuid},recipient.eq.${uuid}`).order("id", { ascending: false }).limit(400);
+  const ids: string[] = [];
+  for (const m of data ?? []) {
+    const o = m.sender === uuid ? m.recipient : m.sender;
+    if (o && o !== JACE_BOT && !friends.has(o) && !ids.includes(o)) ids.push(o);
+    if (ids.length >= 20) break;
+  }
+  if (!ids.length) return [];
+  const { data: people } = await db().from("profiles").select("*").in("uuid", ids);
+  return ids.map((id) => (people ?? []).find((x) => x.uuid === id) as Profile | undefined)
+    .filter((x): x is Profile => !!x && !x.deleted_at)
+    // (presence is only for friends)
+    .map((x) => ({ ...publicProfile(x), online: false, status: "offline", activity: null, last_seen: null, unread: unreadBy[x.uuid] ?? 0, not_friend: true }));
+}
 
 /** Who "name" means: someone's @handle or Jace username (@name, or not a valid Minecraft name), or a Minecraft player. */
 async function findTarget(b: { name?: string; uuid?: string }): Promise<Profile> {
@@ -101,5 +130,7 @@ export const DELETE = handler(async (req) => {
     .select("requester");
   const { data: o } = await db().from("profiles").select("inbox").eq("uuid", other).maybeSingle();
   if (data?.length && o) await notify([o.inbox], "friends", { kind: "removed", uuid: p.uuid });
+  await forgetReplies(p.uuid, other);                // removing someone stops their messages: no answers either way
+  await forgetReplies(other, p.uuid);
   return { ok: true };
 });

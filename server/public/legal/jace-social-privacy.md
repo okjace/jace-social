@@ -50,7 +50,11 @@ If you're banned from Jace Social, we keep the ban and its reason so you can't s
 
 ## Who sees what
 
-Your friends see your status and what you're playing; you can go invisible. Bots only see what's in the chats they're added to, and everything a bot does is logged for its owner and the server's admins. We don't sell your data or show ads.
+Your friends see your status and what you're playing; you can go invisible. People who aren't your friends never see your status.
+
+**Finding you and messaging you:** by default only your friends can message you, and people need your exact @handle to find you. If you turn on **Anyone can find me and message me** (Settings → Links & privacy), you show up when people search in Find people, and anyone can message you. Removing someone (as a friend, or with Stop messages) stops their messages.
+
+**Your profile link** (jace-social.vercel.app/u/your-handle) only shows your profile if you turn on **Public profile page**: then anyone with the link can see your name, picture, about me and links, even without signing in. Bots only see what's in the chats they're added to, and everything a bot does is logged for its owner and the server's admins. We don't sell your data or show ads.
 
 ## Where it's kept
 

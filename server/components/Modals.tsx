@@ -7,6 +7,7 @@ import { BotActivity, MyBots } from "./Bots";
 import { forgetAccount, rememberAccount, savedAccounts, switchAccount } from "@/lib/accounts";
 import { AddAccountModal } from "./AddAccount";
 import { VoiceSettings } from "./VoiceSettings";
+import { MAX_LINKS, SOCIALS, WEBSITE, socialOf } from "@/lib/socialLinks";
 import { SoundSettings } from "./SoundSettings";
 import { DeleteAccountCard } from "./DeleteAccount";
 import { ACCENTS, applySettings, cssDisabled, THEME_NAMES } from "@/lib/theme";
@@ -23,7 +24,7 @@ type Err = (m: string) => void;
 // ---------------------------------------------------------------------------------
 // Someone's profile
 // ---------------------------------------------------------------------------------
-type FullProfile = Person & { is_friend: boolean; is_you: boolean; mutual_servers: { id: string; name: string; icon_url: string | null }[] };
+type FullProfile = Person & { is_friend: boolean; is_you: boolean; can_message?: boolean; mutual_servers: { id: string; name: string; icon_url: string | null }[] };
 
 export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, detail, me }: {
   uuid: string; onClose: () => void; onMessage: (p: Person) => void; onChanged: () => void; onError: Err;
@@ -63,7 +64,7 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
         <ActivityCard a={p.activity} />
         {p.bio && <div className="card"><div className="kind muted small" style={{ fontWeight: 800 }}>ABOUT ME</div><div style={{ whiteSpace: "pre-wrap" }}>{p.bio}</div></div>}
         {p.links.length > 0 && (
-          <div className="chips">{p.links.map((l) => <Link key={l.url} href={l.url}><span className="chip">🔗 {l.label}</span></Link>)}</div>
+          <div className="chips">{p.links.map((l) => <Link key={l.url} href={l.url}><span className="chip">{socialOf(l.url).icon} {l.label}</span></Link>)}</div>
         )}
         {detail && member && <>
           {roles.length > 0 && <div className="chips">{roles.map((r) => <span key={r.id} className="chip"><span className="role-dot" style={{ background: r.color ?? "var(--gray)" }} /> {r.name}</span>)}</div>}
@@ -84,10 +85,18 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
       }} onError={onError} />}
       {!p.is_you && !p.is_bot && (
         <div className="modal-foot">
+          {p.handle && <button className="btn" title="A link to this profile you can share"
+            onClick={() => { void navigator.clipboard?.writeText(`${location.origin}/u/${p.handle}`); onError("Profile link copied"); }}>🔗 Copy profile link</button>}
+          <span className="grow" />
           {p.is_friend ? <>
             <button className="btn danger" onClick={removeFriend}>Remove friend</button>
             <button className="btn primary" onClick={() => { onMessage(p); onClose(); }}>Message</button>
-          </> : <button className="btn primary" onClick={addFriend}>Add friend</button>}
+          </> : <>
+            {p.can_message && <button className="btn danger" title="They (and you) can't send each other messages any more"
+              onClick={async () => { if (!confirm(`Stop messages with ${p.name}?`)) return; try { await api(`/friends?uuid=${uuid}`, { method: "DELETE" }); onChanged(); onClose(); } catch (e) { onError((e as Error).message); } }}>Stop messages</button>}
+            {p.can_message && <button className="btn" onClick={() => { onMessage(p); onClose(); }}>Message</button>}
+            <button className="btn primary" onClick={addFriend}>Add friend</button>
+          </>}
         </div>
       )}
     </Modal>
@@ -239,9 +248,17 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
             <label>About me<textarea rows={4} value={f.bio} maxLength={300} onChange={(e) => setF({ ...f, bio: e.target.value })} /></label>
             <label>Profile color<input type="color" value={f.accent_color} style={{ height: 40, padding: 4 }}
               onChange={(e) => setF({ ...f, accent_color: e.target.value })} /></label>
-            <label>Links (up to 5)</label>
+            <label>Website & social links (up to {MAX_LINKS})</label>
+            <div className="chips">
+              {[WEBSITE, ...SOCIALS.slice(0, 9)].map((so) => (
+                <button key={so.id} className="chip link-add" disabled={f.links.length >= MAX_LINKS}
+                  onClick={() => setF({ ...f, links: [...f.links.filter((x) => x.url.trim() || x.label.trim()), { label: so.id === "website" ? "Website" : so.name, url: so.start }] })}>
+                  {so.icon} {so.name}</button>
+              ))}
+            </div>
             {f.links.map((l, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 6 }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr 2fr auto", gap: 6, alignItems: "center" }}>
+                <span title={socialOf(l.url).name}>{socialOf(l.url).icon}</span>
                 <input placeholder="Name" value={l.label} maxLength={32}
                   onChange={(e) => setF({ ...f, links: f.links.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
                 <input placeholder="https://…" value={l.url} maxLength={300}
@@ -249,7 +266,7 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
                 <button className="icon-btn" aria-label="Remove link" onClick={() => setF({ ...f, links: f.links.filter((_, j) => j !== i) })}>✕</button>
               </div>
             ))}
-            {f.links.length < 5 && <button className="btn small" style={{ justifySelf: "start" }}
+            {f.links.length < MAX_LINKS && <button className="btn small" style={{ justifySelf: "start" }}
               onClick={() => setF({ ...f, links: [...f.links, { label: "", url: "" }] })}>+ Add link</button>}
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save profile"}</button>
@@ -438,6 +455,18 @@ function LinksTab(props: SettingsProps) {
   const trusted = s.trusted_domains ?? [];
   return <>
     <h2>Links & privacy</h2>
+    <Toggle label="Anyone can find me and message me" desc="You show up in Find people, and anyone can send you a message without being your friend. Off: only friends can message you, and people need your exact @handle to find you."
+      checked={s.open_dms === true} onChange={(v) => void set({ open_dms: v })} />
+    <Toggle label="Public profile page" desc="Anyone with your profile link can see your name, picture, about me and links - even without signing in."
+      checked={s.public_profile === true} onChange={(v) => void set({ public_profile: v })} />
+    {props.me.handle && <div className="card" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <span className="grow" style={{ minWidth: 0, overflowWrap: "anywhere" }}><b>Your profile link</b><br />
+        <span className="muted small">{typeof location !== "undefined" ? location.origin : ""}/u/{props.me.handle}</span></span>
+      <button className="btn small" onClick={() => {
+        void navigator.clipboard?.writeText(`${location.origin}/u/${props.me.handle}`);
+        if (s.public_profile !== true && confirm("Copied! Turn on your public profile page too, so people without Jace Social can see it?")) void set({ public_profile: true });
+      }}>Copy</button>
+    </div>}
     <Toggle label="Warn me before opening links" desc="Shows where a link really goes before you leave Jace Social" checked={s.link_warning !== false} onChange={(v) => void set({ link_warning: v })} />
     <label>Trusted sites (no warning)</label>
     {trusted.length === 0 && <p className="muted small" style={{ margin: 0 }}>None yet. You can trust a site from the warning, too.</p>}

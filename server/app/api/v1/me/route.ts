@@ -8,6 +8,7 @@
 import { connectionInfo } from "@/lib/jaceSync";
 import { deleteAccount } from "@/lib/accountDeletion";
 import { appealsFlag } from "@/lib/appeals";
+import { MAX_LINKS, socialOf } from "@/lib/socialLinks";
 import { pushProfileToJace } from "@/lib/jaceAdmin";
 import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
@@ -61,6 +62,10 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   ringtone: (v) => soundChoice(v),
   calling_sound: (v) => soundChoice(v),
   message_sound: (v) => soundChoice(v),
+  // privacy: anyone can find you (Find people) and message you without being friends; your profile
+  // page (jace-social.vercel.app/u/<handle>) can be seen by anyone with the link
+  open_dms: (v) => v === true,
+  public_profile: (v) => v === true,
   message_sound_when: (v) => (["always", "other_chats", "away", "never"].includes(String(v)) ? v : "always"),
 };
 
@@ -116,12 +121,13 @@ export const PATCH = handler(async (req) => {
     patch.status = b.status as Profile["status"];
   }
   if ("links" in b) {
-    if (!Array.isArray(b.links) || b.links.length > 5) throw new ApiError(400, "Up to 5 profile links");
+    if (!Array.isArray(b.links) || b.links.length > MAX_LINKS) throw new ApiError(400, `Up to ${MAX_LINKS} profile links`);
     patch.links = b.links.map((l) => {
       const label = text((l as { label?: unknown })?.label, 32, "Link name") ?? "";
       const url = text((l as { url?: unknown })?.url, 300, "Link") ?? "";
       if (!/^https?:\/\/[^\s]+\.[^\s]+$/i.test(url)) throw new ApiError(400, `"${url}" isn't a web link (https://...)`);
-      return { label: label || new URL(url).hostname.replace(/^www\./, ""), url };
+      const site = socialOf(url);                  // no name given: the site's (YouTube...), or the address
+      return { label: label || (site.id !== "website" ? site.name : new URL(url).hostname.replace(/^www\./, "")), url };
     });
   }
   if ("settings" in b) {

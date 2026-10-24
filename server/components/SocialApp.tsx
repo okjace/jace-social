@@ -22,6 +22,7 @@ import { hasAgreed, LegalDialog } from "./Legal";
 import { isDeletingAccount, RecoveryNotice } from "./DeleteAccount";
 import { Appeals, type AppealRow } from "./Appeals";
 import { AddFriendForm } from "./AddFriend";
+import { FindPeople } from "./FindPeople";
 import { playOnce, unlockSounds } from "@/lib/sounds";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
@@ -32,14 +33,15 @@ import { inviteLink, ServerSettings } from "./ServerSettings";
 import { ActivityCard, Avatar, PersonRow } from "./ui";
 import { useVoice, VoiceBar, VoiceRoom, VoiceUsers } from "./Voice";
 
-type FriendsData = { friends: Person[]; incoming: Person[]; outgoing: Person[]; jace?: Person | null };
+type FriendsData = { friends: Person[]; incoming: Person[]; outgoing: Person[]; jace?: Person | null; others?: Person[] };
 type View =
   | { kind: "home" }
   | { kind: "dm"; uuid: string }
   | { kind: "group"; id: string }
   | { kind: "server"; id: string; channel?: string }
   | { kind: "appeals"; user: string | null }
-  | { kind: "broadcast" };
+  | { kind: "broadcast" }
+  | { kind: "lookup" };
 type ModalState =
   | { kind: "settings"; tab?: SettingsTab } | { kind: "group" } | { kind: "server" } | { kind: "serverSettings"; tab?: "invites" }
   | { kind: "channel"; channel: Channel } | { kind: "status" } | { kind: "welcome" } | { kind: "serverWelcome" } | null;
@@ -150,6 +152,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const [jaceTab, setJaceTab] = useState<JaceTab>("chat");
   const [jaceInbox, setJaceInbox] = useState<InboxEntry[]>([]);
   const [appealsUnread, setAppealsUnread] = useState(0);
+  const [extraPeople, setExtraPeople] = useState<Record<string, Person>>({});
   const [appealsRefresh, setAppealsRefresh] = useState(0);
   const appealsOn = !!me.appeals && me.appeals !== "none";
   const [servers, setServers] = useState<ServerItem[]>([]);
@@ -220,7 +223,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
     const id = h.get("move_call"), peer = h.get("peer"), room = h.get("join_voice");
     if (id && peer) setMoveCall({ id, peer, name: h.get("name") ?? "" });
     if (room) setMoveVoice({ id: room, server: h.get("server") || null, name: h.get("name") ?? "" });
-    if ((id && peer) || room) history.replaceState(null, "", location.pathname + location.search);
+    // a profile link (jace-social.vercel.app/u/<handle> -> "Open in Jace Social"): #profile=<uuid>
+    const prof = h.get("profile");
+    if (prof && /^[0-9a-f]{32}$/.test(prof)) setProfile(prof);
+    if ((id && peer) || room || prof) history.replaceState(null, "", location.pathname + location.search);
   }, []);
   const [voice] = useState(() => new Voice(err));
   const room = useVoice(voice);
@@ -275,13 +281,14 @@ function Main({ me, setMe, signOut, inviteCode }: {
   // everyone we know: friends, group members, the open server's members (with nicknames and roles)
   const people = useMemo(() => {
     const m: Record<string, Person> = {};
-    for (const f of [...friends.friends, ...friends.incoming, ...friends.outgoing]) m[f.uuid] = f;
+    for (const f of [...friends.friends, ...friends.incoming, ...friends.outgoing, ...(friends.others ?? [])]) m[f.uuid] = f;
+    for (const [id, p] of Object.entries(extraPeople)) m[id] ??= p;         // opened from Find people or a profile
     if (friends.jace) m[friends.jace.uuid] = friends.jace;                 // the official Jace bot
     for (const e of jaceInbox) m[e.uuid] ??= inboxPerson(e);              // signed in as the Jace bot: who wrote to it
     for (const g of groups) for (const p of g.members) m[p.uuid] ??= p;
     for (const p of detail?.members ?? []) m[p.uuid] = p;
     return m;
-  }, [friends, groups, detail, jaceInbox]);
+  }, [friends, groups, detail, jaceInbox, extraPeople]);
 
   // live updates
   useEffect(() => {
@@ -549,6 +556,9 @@ function Main({ me, setMe, signOut, inviteCode }: {
               <span style={{ width: 32, textAlign: "center" }}>👥</span><span className="name">Friends</span>
               {friends.incoming.length > 0 && <span className="badge">{friends.incoming.length}</span>}
             </button>
+            <button className={`side-item${view.kind === "lookup" ? " active" : ""}`} onClick={() => go({ kind: "lookup" })}>
+              <span style={{ width: 32, textAlign: "center" }}>🔎</span><span className="name">Find people</span>
+            </button>
             {appealsOn && (
               <button className={`side-item${view.kind === "appeals" ? " active" : ""}${appealsUnread ? " unread" : ""}`}
                 onClick={() => go({ kind: "appeals", user: null })}>
@@ -592,6 +602,16 @@ function Main({ me, setMe, signOut, inviteCode }: {
                 {!!f.unread && !muted.includes(f.uuid) && <span className="badge">{f.unread}</span>}
               </button>
             ))}
+            {/* chats with people who aren't friends (someone who lets anyone message them) */}
+            {!!friends.others?.length && <div className="side-label">Not friends</div>}
+            {(friends.others ?? []).map((f) => (
+              <button key={f.uuid} className={`side-item${view.kind === "dm" && view.uuid === f.uuid ? " active" : ""}${f.unread && !muted.includes(f.uuid) ? " unread" : ""}`}
+                onClick={() => go({ kind: "dm", uuid: f.uuid })}>
+                <Avatar p={f} size={32} />
+                <span className="name">{f.name}<span className="sub">{f.handle ? `@${f.handle}` : "Not your friend"}</span></span>
+                {!!f.unread && !muted.includes(f.uuid) && <span className="badge">{f.unread}</span>}
+              </button>
+            ))}
           </div>
         </>}
         <VoiceBar voice={voice} state={room} onOpen={() => {
@@ -623,6 +643,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
 
       {/* main */}
       <main className="main">
+        {view.kind === "lookup" && <FindPeople onOpen={(uuid) => setProfile(uuid)} back={() => setMobileMain(false)} />}
         {view.kind === "broadcast" && me.jace_staff && <>
           <div className="main-head"><button className="icon-btn mobile-only" onClick={() => setMobileMain(false)}>‹</button>
             <span className="title">📣 Broadcast</span><span className="topic">A message from the Jace bot to everyone</span></div>
@@ -707,7 +728,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
 
       {profile && <ProfileModal uuid={profile} onClose={() => setProfile(null)} onError={err}
         detail={view.kind === "server" ? detail : null} me={me}
-        onMessage={(p) => go({ kind: "dm", uuid: p.uuid })} onChanged={() => { void loadFriends(); if (detail) void loadDetail(detail.server.id); }} />}
+        onMessage={(p) => { setExtraPeople((x) => ({ ...x, [p.uuid]: p })); go({ kind: "dm", uuid: p.uuid }); }} onChanged={() => { void loadFriends(); if (detail) void loadDetail(detail.server.id); }} />}
       {modal?.kind === "settings" && <SettingsModal me={me} initialTab={modal.tab} onClose={() => setModal(null)} onSaved={setMe} onSignOut={signOut} onError={err}
         onWelcome={() => setModal({ kind: "welcome" })} />}
       {modal?.kind === "status" && <StatusModal me={me} onClose={() => setModal(null)} onSaved={setMe} onError={err} />}

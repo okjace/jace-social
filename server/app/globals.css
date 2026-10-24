@@ -555,3 +555,18 @@ select.btn { width: auto; }
 .sound-pick, .modal label.sound-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-transform: none !important; font-size: 14px !important;
   font-weight: 500 !important; color: var(--text) !important; letter-spacing: 0 !important; cursor: pointer; }
 .sound-pick input { width: auto; }
+/* Find people */
+.lookup-row { display: flex; gap: 12px; align-items: center; width: 100%; padding: 8px 10px; border-radius: 10px; background: transparent; border: 0; color: var(--text); }
+.lookup-row:hover { background: var(--hover); }
+.chip.link-add { cursor: pointer; border: 0; }
+/* jace-social.vercel.app/u/<handle> (app/u/[handle]/page.tsx) */
+.profile-page { max-width: 560px; padding: 40px 16px; display: grid; gap: 16px; }
+.profile-page-card { background: var(--panel); border-radius: 18px; overflow: hidden; border: 1px solid var(--line); }
+.profile-page-banner { height: 140px; }
+.profile-page-body { padding: 0 24px 24px; }
+.profile-page-body h1 { margin: 8px 0 0; font-size: 26px; }
+.profile-page-avatar { width: 104px; height: 104px; border-radius: 50%; margin-top: -52px; border: 6px solid var(--panel); object-fit: cover; background: var(--panel2); display: block; }
+.profile-page-avatar.letter { display: grid; place-items: center; font-size: 42px; font-weight: 800; }
+.profile-page-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.profile-page-link { display: inline-flex; gap: 6px; align-items: center; padding: 6px 12px; border-radius: 999px; background: var(--panel2); color: var(--text); text-decoration: none; font-weight: 600; font-size: 14px; }
+.profile-page-link:hover { background: var(--btn-hover); }
