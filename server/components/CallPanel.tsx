@@ -26,6 +26,10 @@ export function CallPanel({ calls, info, people }: { calls: Calls; info: CallInf
   const secs = info.startedAt ? Math.floor((Date.now() - info.startedAt) / 1000) : 0;
   const line = info.state === "ringing" ? "Incoming voice call"
     : info.state === "calling" ? "Calling…"
+    : info.link !== "connected"                    // answered, but sound and video aren't flowing yet
+      ? (info.link === "trouble" || secs > 8
+        ? `Can't reach ${p.name}'s device${info.relay ? " - trying…" : " (no relay server set up)"}`
+        : "Connecting…")
     : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}${info.noMic ? " · no microphone" : ""}`;
 
   return (

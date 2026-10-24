@@ -11,11 +11,13 @@ export type CallInfo = {
   state: CallState; peer: string; peerName: string; muted: boolean; startedAt: number | null; noMic: boolean;
   sharing: boolean; remoteScreen: MediaStream | null;     // screen sharing (renegotiated mid-call)
   camera: MediaStream | null; remoteCamera: MediaStream | null;   // video: yours (for the preview) and theirs
+  link: "connecting" | "connected" | "trouble";   // is sound and video really flowing between the two devices?
+  relay: boolean;                                 // a TURN relay is set up (calls that can't go direct use it)
 };
 type Signal = { id: number; kind: string; call_id: string; from: string; name?: string };
 
 const IDLE: CallInfo = { state: "idle", peer: "", peerName: "", muted: false, startedAt: null, noMic: false, sharing: false, remoteScreen: null,
-  camera: null, remoteCamera: null };
+  camera: null, remoteCamera: null, link: "connecting", relay: false };
 
 function newCallId() {
   const b = new Uint8Array(12);
@@ -42,6 +44,7 @@ export class Calls {
   private timeout: ReturnType<typeof setTimeout> | null = null;
   private ring: { stop: () => void } | null = null;
   private listeners = new Set<(i: CallInfo) => void>();
+  private relay = false;
   private seen = new Set<number>();               // signals already handled (live event and catch-up)
   private lastSeen = 0;
   private poll: ReturnType<typeof setInterval> | null = null;
@@ -303,6 +306,7 @@ export class Calls {
     }
     if (this.callId !== id) { mic?.getTracks().forEach((t) => t.stop()); throw new Error("Call ended"); }
     const pc = new RTCPeerConnection({ iceServers: ice_servers });
+    this.relay = hasRelay(ice_servers);
     this.pc = pc;
     this.mic = mic;
     if (mic) mic.getAudioTracks().forEach((t) => { t.enabled = !this.info.muted; pc.addTrack(t, mic); });
@@ -328,6 +332,8 @@ export class Calls {
     };
     pc.onconnectionstatechange = () => {
       if (this.pc !== pc) return;
+      const link = pc.connectionState === "connected" ? "connected" : ["failed", "disconnected"].includes(pc.connectionState) ? "trouble" : "connecting";
+      if (link !== this.info.link || this.info.relay !== this.relay) this.set({ ...this.info, link, relay: this.relay });
       if (pc.connectionState === "failed") this.hangUp("Couldn't connect the call");
       // dropped for a moment (Wi-Fi changed, a slow network): the caller reconnects it after 6 s
       if (pc.connectionState === "disconnected" && this.callerSide) setTimeout(() => {
