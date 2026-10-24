@@ -1,5 +1,6 @@
 // GET ?before=<id>&around=<id>: 50 messages (oldest first) with senders, reactions and replied-to messages
 // POST {body, reply_to?, attachments?}: send a message to a group chat or server channel
+import { checkUploads } from "@/lib/storage";
 import { ApiError, body, db, handler, me } from "@/lib/server";
 import { MESSAGE_COLUMNS, channelFor, olderThan, postMessage, profilesById, type Attachment } from "@/lib/chat";
 import { pullSoon, pushChannelLater } from "@/lib/jaceSync";
@@ -48,6 +49,7 @@ export const POST = handler(async (req, ctx) => {
   const b = await body<{ body?: string; reply_to?: number; attachments?: Attachment[]; no_embed?: unknown }>(req);
   const text = String(b.body ?? "").trim();
   const attachments = cleanAttachments(b.attachments, p.uuid);
+  await checkUploads(attachments.map((x) => x.url));   // real sizes on R2/B2 (lib/storage.ts)
   if (attachments.length && !has(perms, P.ATTACH)) throw new ApiError(403, "You can't attach files here");
   if (!text && !attachments.length) throw new ApiError(400, "Message is empty");
   if (text.length > 2000) throw new ApiError(400, "Messages can be up to 2000 characters");

@@ -59,6 +59,14 @@ assert.ok(a.url.startsWith(`${S3}/jace/attachments/${bob.uuid}/`));
 assert.equal(await (await fetch(a.url)).text(), "x".repeat(100));
 assert.equal((await usage()).r2, 100);
 
+step("a file bigger than it said is refused and deleted (the totals can't be fooled)");
+const liar = await api(bob.token, "/uploads", { body: { name: "liar.txt", type: "text/plain", size: 10 } });
+assert.equal(liar.provider, "r2");
+await fetch(liar.upload_url, { method: "PUT", headers: liar.headers, body: Buffer.from("y".repeat(150)) });
+assert.equal((await api(bob.token, "/messages", { body: { to: alice.uuid, body: "", attachments: [{ url: liar.url, name: "liar.txt", type: "text/plain", size: 10 }] }, allowError: true })).status, 413);
+assert.equal(await (await fetch(liar.url)).status, 404, "deleted");
+assert.equal((await usage()).r2, 100, "and not counted");
+
 step("a profile picture fits too (R2 holds ~214 bytes in this test)");
 const pic = await api(alice.token, "/me/avatar", { raw: PNG });
 assert.ok(pic.avatar_url.startsWith(`${S3}/jace/avatars/`), pic.avatar_url);

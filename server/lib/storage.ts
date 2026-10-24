@@ -10,7 +10,7 @@
 // site) and they serve the files from their public URL. Every file's URL is
 //   <the service's public URL>/<area>/<key>      area: attachments | avatars | sounds
 // so a file can be checked as "ours" (and its owner's) by its URL alone, whichever service it's on.
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ApiError, db, supabaseUrl } from "./server";
 
@@ -107,6 +107,37 @@ export async function putFile(owner: string | null, area: Area, key: string, byt
   if (error) throw new ApiError(500, `Couldn't save the file (${error.message})`);
   await record(p, url, key, bytes.length, owner);
   return db().storage.from(area).getPublicUrl(key).data.publicUrl;
+}
+
+/**
+ * Files uploaded straight to R2/B2 (message files): check each one's real size before it's sent - the
+ * app says how big a file is when it asks to upload, so a tampered app could say 1 KB and upload 500 MB,
+ * and the "nearly full" totals would be wrong. Too big: deleted and refused. Otherwise the total is
+ * corrected to the real size, so a service is never filled past its limit (9.5 GB on R2/B2).
+ */
+export async function checkUploads(urls: string[]) {
+  if (!urls.length) return;
+  const { data: rows } = await db().from("storage_files").select("*").in("url", urls);
+  for (const f of rows ?? []) {
+    const p = providers().find((x) => x.id === f.provider);
+    if (!p?.s3) continue;                              // Supabase checks sizes itself (its bucket limit)
+    let real: number;
+    try {
+      const head = await p.s3.client.send(new HeadObjectCommand({ Bucket: p.s3.bucket, Key: f.key }));
+      if (head.ContentLength === undefined) continue;   // (no size given: nothing to check)
+      real = Number(head.ContentLength);
+    } catch {
+      throw new ApiError(400, "Upload the file first");   // never uploaded (or gone)
+    }
+    if (real > p.maxFile || real > Number(f.size)) {   // (the app knows the exact size)
+      await removeFile(f.url);
+      throw new ApiError(413, "That file is bigger than it said - send it again");
+    }
+    if (real !== Number(f.size)) {
+      await db().from("storage_files").update({ size: real }).eq("url", f.url);
+      await db().rpc("storage_add", { p: f.provider, n: real - Number(f.size) });
+    }
+  }
 }
 
 /** Delete a file we stored (wherever it went). */

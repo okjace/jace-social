@@ -1,6 +1,7 @@
 // GET ?with=<uuid>&before=<id>: chat history with a friend (newest 50, oldest first), with reactions
 //   and the messages replied to
 // POST {to, body, reply_to?, attachments?}: send a message to a friend
+import { checkUploads } from "@/lib/storage";
 import { ApiError, areFriends, body, cleanUuid, db, handler, JACE_BOT, me, notify } from "@/lib/server";
 import { answerLater } from "@/lib/jaceBot";
 import { olderThan } from "@/lib/chat";
@@ -61,6 +62,7 @@ export const POST = handler(async (req) => {
   const to = cleanUuid(b.to);
   const text = String(b.body ?? "").trim();
   const attachments = cleanAttachments(b.attachments, p.uuid);
+  await checkUploads(attachments.map((x) => x.url));   // real sizes on R2/B2 (lib/storage.ts)
   if (!text && !attachments.length) throw new ApiError(400, "Message is empty");
   if (text.length > 2000) throw new ApiError(400, "Messages can be up to 2000 characters");
   // anyone can message the official Jace bot, and it can message anyone

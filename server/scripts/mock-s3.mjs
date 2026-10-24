@@ -24,5 +24,6 @@ createServer(async (req, res) => {
   if (req.method === "DELETE") { objects.delete(path); res.writeHead(204); return res.end(); }
   const o = objects.get(path);
   if (!o) { res.writeHead(404); return res.end("not found"); }
-  res.writeHead(200, { "Content-Type": o.type }); res.end(o.body);
+  res.writeHead(200, { "Content-Type": o.type, "Content-Length": o.body.length });
+  res.end(req.method === "HEAD" ? undefined : o.body);
 }).listen(PORT, () => console.log(`Mock S3 on http://localhost:${PORT}`));
