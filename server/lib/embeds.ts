@@ -5,8 +5,11 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { after } from "next/server";
 import { db } from "./server";
+import { playerFor } from "./videoEmbeds";
 
-export type Embed = { url: string; title?: string; description?: string; image?: string; site?: string; color?: string; type: "link" | "image" | "video" };
+// video: a link straight to a video file (played in the chat); video sites' players come from the
+// link itself (lib/videoEmbeds.ts)
+export type Embed = { url: string; title?: string; description?: string; image?: string; site?: string; color?: string; type: "link" | "image" | "video"; video?: string };
 
 const URL_RE = /https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"\]]/gi;
 const MAX_LINKS = 3;
@@ -67,7 +70,42 @@ function meta(html: string, ...names: string[]): string | undefined {
 
 const clip = (s: string | undefined, n: number) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s);
 
+/** YouTube and Vimeo: the title and thumbnail from their oEmbed APIs (YouTube often blocks page fetches from servers). */
+async function videoInfo(raw: string): Promise<Embed | null> {
+  const u = new URL(raw);
+  const yt = /(^|\.)(youtube\.com|youtu\.be)$/.test(u.hostname);
+  const api = yt ? `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(raw)}`
+    : /(^|\.)vimeo\.com$/.test(u.hostname) ? `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(raw)}` : null;
+  if (!api) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 3500);
+  try {
+    const r = await fetch(api, { signal: ctrl.signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; JaceSocialBot/1.0; +https://jace-social.vercel.app/)" } });
+    if (r.ok) {
+      const o = await r.json() as { title?: string; author_name?: string; thumbnail_url?: string; provider_name?: string };
+      return {
+        url: raw, type: "video", title: clip(o.title, 120), description: clip(o.author_name, 300),
+        image: o.thumbnail_url?.startsWith("https://") ? o.thumbnail_url : undefined,
+        site: o.provider_name ?? (yt ? "YouTube" : "Vimeo"), color: yt ? "#ff0000" : "#1ab7ea",
+      };
+    }
+  } catch { /* fall back to the page */ } finally { clearTimeout(timer); }
+  return null;
+}
+
 async function one(raw: string): Promise<Embed | null> {
+  const player = !!playerFor(raw);
+  if (player) {
+    const info = await videoInfo(raw);
+    if (info) return info;
+  }
+  const page = await fromPage(raw);
+  // a video site's page that couldn't be read still plays (with the site's name)
+  if (player) return page ? { ...page, type: "video" } : { url: raw, type: "video", site: new URL(raw).hostname.replace(/^www\./, "") };
+  return page;
+}
+
+async function fromPage(raw: string): Promise<Embed | null> {
   let url = await safeUrl(raw);
   if (!url) return null;
   // follow up to 3 redirects by hand, checking each address
@@ -87,6 +125,10 @@ async function one(raw: string): Promise<Embed | null> {
       if (!r.ok) return null;
       const type = r.headers.get("content-type") ?? "";
       if (type.startsWith("image/")) return { url: raw, image: url.toString(), type: "image" };
+      if (type.startsWith("image/") || type.startsWith("video/")) void r.body?.cancel().catch(() => {});
+      if (/^video\/(mp4|webm|quicktime|x-m4v)/.test(type) && url.protocol === "https:")
+        return { url: raw, video: url.toString(), type: "video", site: url.hostname.replace(/^www\./, ""),
+          title: clip(decodeURIComponent(url.pathname.split("/").pop() ?? ""), 120) || undefined };
       if (!type.includes("html")) return null;
       // read at most MAX_BYTES of the page
       const reader = r.body?.getReader();

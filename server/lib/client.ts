@@ -92,7 +92,7 @@ export type Role = {
 export type Override = { channel_id: string; target_type: "role" | "member"; target_id: string; allow: number; deny: number };
 export type VoiceState = { channel_id: string; uuid: string; muted: boolean; deafened: boolean; streaming: boolean };
 export type Attachment = { url: string; name: string; type: string; size: number; width?: number; height?: number; no_preview?: boolean };
-export type Embed = { url: string; title?: string; description?: string; image?: string; site?: string; color?: string; type: "link" | "image" | "video" };
+export type Embed = { url: string; title?: string; description?: string; image?: string; site?: string; color?: string; type: "link" | "image" | "video"; video?: string };
 export type Reaction = { emoji: string; count: number; me: boolean };
 export type Command = { bot: string; bot_name: string; avatar_url: string | null; name: string; description: string;
   options: { name: string; description?: string; required?: boolean }[] };

@@ -9,6 +9,7 @@ import { timeLabel, type Attachment, type Embed, type Message, type Person, type
 import { EmojiPicker, QUICK_REACTIONS } from "./EmojiPicker";
 import { Link, Markdown, jumboEmoji, type MentionInfo } from "./Markdown";
 import { Avatar } from "./ui";
+import { playerFor } from "@/lib/videoEmbeds";
 
 export type MessageActions = {
   reply?: () => void; edit?: () => void; remove?: () => void; pin?: () => void; unpin?: () => void;
@@ -57,6 +58,24 @@ function Files({ files, onImage }: { files: Attachment[]; onImage: (url: string)
   );
 }
 
+/** A video link: its thumbnail with a play button, then the site's player (or a video file's) once pressed. */
+function VideoEmbed({ e }: { e: Embed }) {
+  const [playing, setPlaying] = useState(false);
+  const player = e.video ? null : playerFor(e.url, typeof location === "undefined" ? undefined : location.hostname);
+  if (!player && !e.video) return null;
+  if (playing || (e.video && !e.image)) return e.video
+    ? <video className="embed-player" src={e.video} controls autoPlay={playing} preload="metadata" playsInline />
+    : <iframe className={`embed-player${player!.tall ? " tall" : ""}`} src={player!.src} title={e.title ?? "Video"} allowFullScreen
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerPolicy="strict-origin-when-cross-origin" />;
+  return (
+    <button className="embed-play" onClick={() => setPlaying(true)} aria-label={`Play ${e.title ?? "the video"}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {e.image ? <img src={e.image} alt="" loading="lazy" /> : <span className="embed-play-blank" />}
+      <span className="embed-play-button">▶</span>
+    </button>
+  );
+}
+
 function Embeds({ embeds, onImage }: { embeds: Embed[]; onImage: (url: string) => void }) {
   return (
     <>
@@ -64,11 +83,11 @@ function Embeds({ embeds, onImage }: { embeds: Embed[]; onImage: (url: string) =
         // eslint-disable-next-line @next/next/no-img-element
         <img key={i} className="embed-image-only" src={e.image} alt="" loading="lazy" onClick={() => onImage(e.image!)} />
       ) : (
-        <div key={i} className="embed" style={{ borderLeftColor: e.color ?? "var(--line2)" }}>
+        <div key={i} className={`embed${e.type === "video" ? " video" : ""}`} style={{ borderLeftColor: e.color ?? "var(--line2)" }}>
           {e.site && <div className="embed-site">{e.site}</div>}
           {e.title && <div className="embed-title"><Link href={e.url}>{e.title}</Link></div>}
           {e.description && <div className="embed-desc">{e.description}</div>}
-          {e.image && (
+          {e.type === "video" && (e.video || playerFor(e.url)) ? <VideoEmbed e={e} /> : e.image && (
             // eslint-disable-next-line @next/next/no-img-element
             <img className={e.type === "video" ? "embed-video" : "embed-image"} src={e.image} alt="" loading="lazy"
               onClick={() => e.type === "video" ? undefined : onImage(e.image!)} />
