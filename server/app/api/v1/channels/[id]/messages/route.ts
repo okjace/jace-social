@@ -45,7 +45,7 @@ export const POST = handler(async (req, ctx) => {
     throw new ApiError(403, `You're timed out until ${new Date(server.timeoutUntil).toLocaleString()}`);
   if (!has(perms, P.SEND) || (channel.kind === "announcement" && !has(perms, P.MANAGE_MESSAGES)))
     throw new ApiError(403, "You can't send messages in this channel");
-  const b = await body<{ body?: string; reply_to?: number; attachments?: Attachment[] }>(req);
+  const b = await body<{ body?: string; reply_to?: number; attachments?: Attachment[]; no_embed?: unknown }>(req);
   const text = String(b.body ?? "").trim();
   const attachments = cleanAttachments(b.attachments, p.uuid);
   if (attachments.length && !has(perms, P.ATTACH)) throw new ApiError(403, "You can't attach files here");
@@ -61,7 +61,8 @@ export const POST = handler(async (req, ctx) => {
       .eq("channel_id", channel.id).eq("sender", p.uuid).gt("created_at", since);
     if (recent) throw new ApiError(429, `Slowmode is on: one message every ${channel.slowmode} seconds`);
   }
-  const message = await postMessage(channel, members, p, text, "text", { reply_to: b.reply_to ? Number(b.reply_to) : null, attachments, perms });
+  const message = await postMessage(channel, members, p, text, "text", { reply_to: b.reply_to ? Number(b.reply_to) : null, attachments, perms,
+    ...(b.no_embed === true ? { embeds: [] } : {}) });   // no link preview: the sender said no
   if (!channel.server_id) pushChannelLater(p, channel.id, message as { id: number; body: string; created_at: string });
   return { message };
 });

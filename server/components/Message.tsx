@@ -25,8 +25,9 @@ export function nameStyle(p: Person | undefined, roles: Role[]) {
 }
 
 function Files({ files, onImage }: { files: Attachment[]; onImage: (url: string) => void }) {
-  const images = files.filter((f) => f.type.startsWith("image/"));
-  const others = files.filter((f) => !f.type.startsWith("image/"));
+  // no_preview: the sender chose to send it as a file (no picture or player)
+  const images = files.filter((f) => f.type.startsWith("image/") && !f.no_preview);
+  const others = files.filter((f) => !f.type.startsWith("image/") || f.no_preview);
   return (
     <div className="attachments">
       {images.length > 0 && (
@@ -38,11 +39,11 @@ function Files({ files, onImage }: { files: Attachment[]; onImage: (url: string)
           ))}
         </div>
       )}
-      {others.map((f) => f.type.startsWith("video/") ? <video key={f.url} src={f.url} controls preload="metadata" className="att-video" />
-        : f.type.startsWith("audio/") ? <div key={f.url} className="att-file"><span>🎵 {f.name}</span><audio src={f.url} controls preload="none" /></div>
+      {others.map((f) => f.type.startsWith("video/") && !f.no_preview ? <video key={f.url} src={f.url} controls preload="metadata" className="att-video" />
+        : f.type.startsWith("audio/") && !f.no_preview ? <div key={f.url} className="att-file"><span>🎵 {f.name}</span><audio src={f.url} controls preload="none" /></div>
         : (
           <a key={f.url} className="att-file" href={f.url} target="_blank" rel="noopener noreferrer" download={f.name}>
-            <span className="att-icon">📄</span>
+            <span className="att-icon">{f.type.startsWith("image/") ? "🖼️" : f.type.startsWith("video/") ? "🎬" : f.type.startsWith("audio/") ? "🎵" : "📄"}</span>
             <span className="att-name"><b>{f.name}</b><span className="muted small">{fmtSize(f.size)}</span></span>
             <span className="muted">⬇</span>
           </a>

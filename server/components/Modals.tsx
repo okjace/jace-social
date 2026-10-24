@@ -468,6 +468,12 @@ function LinksTab(props: SettingsProps) {
       }}>Copy</button>
     </div>}
     <Toggle label="Warn me before opening links" desc="Shows where a link really goes before you leave Jace Social" checked={s.link_warning !== false} onChange={(v) => void set({ link_warning: v })} />
+    <Toggle label="Ask about previews when I send a link or file" desc="Before sending, choose whether a link gets a preview and whether pictures and videos show in the chat"
+      checked={s.preview_ask !== false} onChange={(v) => void set({ preview_ask: v })} />
+    <Toggle label={s.preview_ask !== false ? "Link previews ticked at first" : "Link previews"} desc="The site's title, description and picture under messages with a link"
+      checked={s.preview_links !== false} onChange={(v) => void set({ preview_links: v })} />
+    <Toggle label={s.preview_ask !== false ? "File previews ticked at first" : "File previews"} desc="Pictures and videos you send show in the chat (off: sent as files to download)"
+      checked={s.preview_files !== false} onChange={(v) => void set({ preview_files: v })} />
     <label>Trusted sites (no warning)</label>
     {trusted.length === 0 && <p className="muted small" style={{ margin: 0 }}>None yet. You can trust a site from the warning, too.</p>}
     <div className="chips">{trusted.map((d) => <span key={d} className="chip">{d} <button className="icon-btn small" onClick={() => void set({ trusted_domains: trusted.filter((x) => x !== d) })}>✕</button></span>)}</div>

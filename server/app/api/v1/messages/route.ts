@@ -57,7 +57,7 @@ async function allowReplies(p: { uuid: string; settings?: Record<string, unknown
 
 export const POST = handler(async (req) => {
   const p = await me(req);
-  const b = await body<{ to?: string; body?: string; reply_to?: number; attachments?: unknown }>(req);
+  const b = await body<{ to?: string; body?: string; reply_to?: number; attachments?: unknown; no_embed?: unknown }>(req);
   const to = cleanUuid(b.to);
   const text = String(b.body ?? "").trim();
   const attachments = cleanAttachments(b.attachments, p.uuid);
@@ -91,7 +91,7 @@ export const POST = handler(async (req) => {
   if (o) await notify([o.inbox], "message", { from: p.uuid, name: p.name, id: data.id });
   if (to === JACE_BOT) answerLater(p, text);               // the Jace bot answers (AI, unless a person has the chat)
   pushDmLater(p, to, data);                          // also to Jace, when both people use Jace (after answering)
-  previewLater("messages", data.id, text, async () => {
+  if (b.no_embed !== true) previewLater("messages", data.id, text, async () => {   // (no_embed: the sender said no link preview)
     await notify([o?.inbox, p.inbox].filter(Boolean) as string[], "dm_update", { from: p.uuid, with: to, id: data.id, edited: true });
   });
   return { message: data };

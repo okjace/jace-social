@@ -14,7 +14,7 @@ export type Channel = {
   owner: string | null; position: number; created_at: string;
   kind: "text" | "voice" | "announcement" | "category"; parent_id: string | null; slowmode: number; user_limit: number;
 };
-export type Attachment = { url: string; name: string; type: string; size: number; width?: number; height?: number };
+export type Attachment = { url: string; name: string; type: string; size: number; width?: number; height?: number; no_preview?: boolean };
 
 /** The columns every message read returns. */
 export const MESSAGE_COLUMNS: string = "id, channel_id, sender, body, kind, created_at, edited_at, reply_to, attachments, embeds, "

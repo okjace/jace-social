@@ -65,6 +65,10 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   // privacy: anyone can find you (Find people) and message you without being friends; your profile
   // page (jace-social.vercel.app/u/<handle>) can be seen by anyone with the link
   open_dms: (v) => v === true,
+  // sending a link or a picture/video/sound: ask about previews (or don't, and use these)
+  preview_ask: (v) => v !== false,
+  preview_links: (v) => v !== false,
+  preview_files: (v) => v !== false,
   public_profile: (v) => v === true,
   message_sound_when: (v) => (["always", "other_chats", "away", "never"].includes(String(v)) ? v : "always"),
 };

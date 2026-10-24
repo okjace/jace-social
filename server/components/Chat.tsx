@@ -16,6 +16,9 @@ type Upload = { id: string; file: File; progress: "uploading" | "done" | "error"
 
 const DM_PERMS = P.VIEW | P.SEND | P.ATTACH | P.REACT;
 
+/** A picture, video or sound: shown in the chat unless sent without a preview. */
+const previewable = (f: Attachment) => /^(image|video|audio)\//.test(f.type);
+
 export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenProfile, onError, placeholder, settings, typing = [], showPins, onClosePins }: {
   target: ChatTarget; me: Me; people: Record<string, Person>; roles?: Role[]; perms?: number; reloadKey: number;
   onOpenProfile: (uuid: string) => void; onError: (msg: string) => void; placeholder: string; settings: Settings;
@@ -30,6 +33,10 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
   const [editing, setEditing] = useState<number | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
+  // "Show previews?" before sending a link or a picture/video/sound
+  const [ask, setAsk] = useState<null | { body: string; files: Attachment[]; reply?: number; hasLink: boolean; hasMedia: boolean;
+    links: boolean; media: boolean; remember: boolean }>(null);
+  const prefs = useRef<Settings>({});                 // "don't ask again" this session, before settings reload
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [emoji, setEmoji] = useState(false);
   const [commands, setCommands] = useState<Command[]>([]);
@@ -111,7 +118,7 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
     if (!has(can, P.ATTACH)) return onError("You can't attach files here");
     const list = [...files].slice(0, 10 - uploads.length);
     for (const file of list) {
-      if (file.size > 10 * 1024 * 1024) { onError(`${file.name} is bigger than 10 MB`); continue; }
+      if (file.size > 50 * 1024 * 1024) { onError(`${file.name} is bigger than 50 MB`); continue; }
       const id = Math.random().toString(36).slice(2);
       const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
       setUploads((u) => [...u, { id, file, progress: "uploading", preview }]);
@@ -151,10 +158,24 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
       if (cmd) { setText(""); return runCommand(cmd, body.slice(name.length + 2)); }
     }
     const reply = replyTo?.id;
+    // a link or a picture/video/sound in it: ask whether to show previews (Settings -> Links & privacy)
+    const s = { ...(settings ?? me.settings ?? {}), ...prefs.current };
+    const hasLink = /https?:\/\/\S+\.\S+/i.test(body);
+    const hasMedia = files.some(previewable);
+    if (s.preview_ask !== false && (hasLink || hasMedia)) {
+      setAsk({ body, files, reply, hasLink, hasMedia, links: s.preview_links !== false, media: s.preview_files !== false, remember: false });
+      return;
+    }
+    await deliver(body, files, reply, { links: s.preview_links !== false, media: s.preview_files !== false });
+  }
+
+  /** Send it, with or without previews for its links and files. */
+  async function deliver(body: string, files: Attachment[], reply: number | undefined, show: { links: boolean; media: boolean }) {
     setText(""); setReplyTo(null); setUploads([]); picked.current = {};
     stick.current = true;
     try {
-      const payload = { body, reply_to: reply, attachments: files };
+      const attachments = show.media ? files : files.map((f) => (previewable(f) ? { ...f, no_preview: true } : f));
+      const payload = { body, reply_to: reply, attachments, ...(show.links ? {} : { no_embed: true }) };
       if (target.kind === "dm") await api("/messages", { body: { to: target.uuid, ...payload } });
       else await api(`/channels/${target.id}/messages`, { body: payload });
       await load();
@@ -381,6 +402,34 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
           <img src={lightbox} alt="" style={{ width: "100%", display: "block", borderRadius: 16 }} />
           <div className="modal-foot"><a className="btn small" href={lightbox} target="_blank" rel="noopener noreferrer">Open original</a>
             <button className="btn small" onClick={() => setLightbox(null)}>Close</button></div>
+        </Modal>
+      )}
+      {ask && (
+        <Modal onClose={() => setAsk(null)}>
+          <div className="modal-body">
+            <h2>Show previews?</h2>
+            {ask.hasLink && <label className="check preview-choice"><input type="checkbox" checked={ask.links}
+              onChange={(e) => setAsk({ ...ask, links: e.target.checked })} />
+              <span><b>Link preview</b><span className="muted small">The site&apos;s title, description and picture under your message</span></span></label>}
+            {ask.hasMedia && <label className="check preview-choice"><input type="checkbox" checked={ask.media}
+              onChange={(e) => setAsk({ ...ask, media: e.target.checked })} />
+              <span><b>File preview</b><span className="muted small">Pictures and videos show in the chat (and sounds get a player) - off: just a file to download</span></span></label>}
+            <label className="check small"><input type="checkbox" checked={ask.remember} onChange={(e) => setAsk({ ...ask, remember: e.target.checked })} />
+              Don&apos;t ask again (use these from now on - change it in Settings → Links &amp; privacy)</label>
+          </div>
+          <div className="modal-foot">
+            <button className="btn" onClick={() => setAsk(null)}>Cancel</button>
+            <button className="btn primary" autoFocus onClick={() => {
+              const a = ask;
+              setAsk(null);
+              if (a.remember) {
+                const patch: Settings = { preview_ask: false, ...(a.hasLink ? { preview_links: a.links } : {}), ...(a.hasMedia ? { preview_files: a.media } : {}) };
+                prefs.current = { ...prefs.current, ...patch };
+                void api("/me", { method: "PATCH", body: { settings: patch } }).catch(() => {});
+              }
+              void deliver(a.body, a.files, a.reply, { links: a.links, media: a.media });
+            }}>Send</button>
+          </div>
         </Modal>
       )}
     </div>

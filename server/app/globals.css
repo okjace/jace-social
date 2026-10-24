@@ -570,3 +570,7 @@ select.btn { width: auto; }
 .profile-page-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .profile-page-link { display: inline-flex; gap: 6px; align-items: center; padding: 6px 12px; border-radius: 999px; background: var(--panel2); color: var(--text); text-decoration: none; font-weight: 600; font-size: 14px; }
 .profile-page-link:hover { background: var(--btn-hover); }
+/* "Show previews?" when sending (components/Chat.tsx) */
+.preview-choice { display: flex !important; gap: 10px; align-items: flex-start; text-transform: none !important; letter-spacing: 0 !important; font-size: 14px !important; color: var(--text) !important; font-weight: 500 !important; }
+.preview-choice input { width: auto; margin-top: 3px; }
+.preview-choice > span { display: grid; gap: 2px; }
