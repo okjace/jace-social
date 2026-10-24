@@ -1,5 +1,6 @@
 "use client";
 // The floating voice call panel: ringing, calling, and in a call.
+import { StreamVideo } from "./StreamVideo";
 import { useEffect, useRef, useState } from "react";
 import type { Person } from "@/lib/client";
 import type { CallInfo, Calls } from "@/lib/calls";
@@ -42,8 +43,9 @@ export function CallPanel({ calls, info, people }: { calls: Calls; info: CallInf
         <button className="btn primary small" onClick={() => void calls.answer()}>Answer</button>
         <button className="btn danger small" onClick={() => calls.hangUp()}>Decline</button>
       </> : <>
-        {info.state === "in-call" && !info.noMic &&
-          <button className="btn small" onClick={() => calls.toggleMute()} aria-pressed={info.muted}>{info.muted ? "Unmute" : "Mute"}</button>}
+        {info.state === "in-call" && (info.noMic
+          ? <button className="btn small danger" onClick={() => calls.toggleMute()} title="Your microphone didn't start - click to try again">🎙️ Try my mic again</button>
+          : <button className="btn small" onClick={() => calls.toggleMute()} aria-pressed={info.muted}>{info.muted ? "Unmute" : "Mute"}</button>)}
         {info.state === "in-call" && canUseCamera() &&
           <button className={`btn small${info.camera ? " primary" : ""}`} onClick={() => void calls.toggleCamera()} title={info.camera ? "Turn off camera" : "Turn on camera"}>📷</button>}
         {info.state === "in-call" && typeof navigator !== "undefined" && "getDisplayMedia" in (navigator.mediaDevices ?? {}) &&
@@ -55,23 +57,19 @@ export function CallPanel({ calls, info, people }: { calls: Calls; info: CallInf
 }
 
 function RemoteScreen({ stream, name }: { stream: MediaStream; name: string }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
   return (
     <div className="call-screen">
-      <video ref={ref} autoPlay playsInline className="call-video" onDoubleClick={(e) => void e.currentTarget.requestFullscreen?.().catch(() => {})} />
+      <StreamVideo stream={stream} className="call-video" />
       <span className="muted small">🖥️ {name}'s screen · double-click for full screen</span>
     </div>
   );
 }
 
 function Video({ stream, className, label, muted, mirror }: { stream: MediaStream; className: string; label: string; muted?: boolean; mirror?: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
+  void muted;                                    // videos are always muted (their sound plays separately)
   return (
     <div className={className}>
-      <video ref={ref} autoPlay playsInline muted={muted} style={mirror ? { transform: "scaleX(-1)" } : undefined}
-        onDoubleClick={(e) => void e.currentTarget.requestFullscreen?.().catch(() => {})} />
+      <StreamVideo stream={stream} mirror={mirror} />
       <span className="cam-label">{label}</span>
     </div>
   );

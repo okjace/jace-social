@@ -60,14 +60,20 @@ export function Appeals({ open, onOpen, refresh, onUnread, onReconnected, onErro
   const [list, setList] = useState<AppealRow[] | null>(null);
   const [reconnect, setReconnect] = useState(false);
   const [filter, setFilter] = useState<Filter>("waiting");
-  const load = async () => {
+  const load = async (quiet = false) => {
     try {
       const r = await api<{ appeals: AppealRow[]; reconnect?: boolean }>("/appeals");
       setReconnect(!!r.reconnect); setList(r.appeals);
       onUnread(r.appeals.filter((a) => a.unread).length);
-    } catch (e) { onError((e as Error).message); setList([]); }
+    } catch (e) { if (!quiet) { onError((e as Error).message); setList([]); } }
   };
   useEffect(() => { void load(); }, [refresh, open]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Jace has no live events: while the inbox is open, look for new appeals every 30 seconds
+  useEffect(() => {
+    if (open) return;
+    const t = setInterval(() => { if (!document.hidden) void load(true); }, 30_000);
+    return () => clearInterval(t);
+  }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (reconnect) return <Reconnect onDone={() => { onReconnected(); void load(); }} onError={onError} />;
   const row = list?.find((a) => a.user_id === open);
   if (open) return <AppealThread userId={open} summary={row} refresh={refresh} onBack={() => onOpen(null)} onChanged={load} onError={onError}
@@ -117,14 +123,21 @@ function AppealThread({ userId, summary, refresh, onBack, onChanged, onError, on
   const [result, setResult] = useState("");
   const replyId = useRef(crypto.randomUUID());             // the same id when retrying: Jace sends it once
   const end = useRef<HTMLDivElement>(null);
-  const load = async () => {
+  const load = async (quiet = false) => {
     try {
       const r = await api<{ appeal?: AppealRow; messages?: Msg[]; reconnect?: boolean }>(`/appeals/${encodeURIComponent(userId)}`);
       if (r.reconnect) { onReconnect(); return; }
-      setAppeal(r.appeal ?? null); setMessages(r.messages ?? []);
-    } catch (e) { onError((e as Error).message); }
+      setAppeal(r.appeal ?? null);
+      // only when something changed, so the view doesn't jump while you read or type
+      setMessages((old) => (old && r.messages && old.length === r.messages.length && old.at(-1)?.id === r.messages.at(-1)?.id ? old : r.messages ?? []));
+    } catch (e) { if (!quiet) onError((e as Error).message); }
   };
   useEffect(() => { void load(); }, [userId, refresh]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // their new messages show up while the thread is open (Jace has no live events): every 10 seconds
+  useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) void load(true); }, 10_000);
+    return () => clearInterval(t);
+  }, [userId]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [messages]);
 
   async function send(kind: "reply" | "keep") {

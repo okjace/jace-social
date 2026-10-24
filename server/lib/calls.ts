@@ -4,7 +4,7 @@
 // Like the launcher, each side sends its full description once ICE gathering is done
 // (no trickle), and audio goes straight between players or through the TURN relay.
 import { api } from "./client";
-import { getCamera, markMove, readStreams, tagStreams, type StreamKinds } from "./media";
+import { deviceProblem, getCamera, getMic, markMove, readStreams, tagStreams, type StreamKinds } from "./media";
 
 export type CallState = "idle" | "calling" | "ringing" | "in-call";
 export type CallInfo = {
@@ -147,10 +147,20 @@ export class Calls {
       this.cameraSenders = [];
       this.set({ ...this.info, camera: null });
     } else {
-      try { this.camera = await getCamera(); } catch { this.onEnded("Couldn't turn on your camera - check that it's connected and allowed"); return; }
+      try { this.camera = await getCamera(); } catch (e) { this.onEnded(deviceProblem(e, "camera")); return; }
       this.cameraSenders = this.camera.getTracks().map((t) => pc.addTrack(t, this.camera!));
       this.set({ ...this.info, camera: this.camera });
     }
+    await this.renegotiate();
+  }
+
+  /** No microphone when the call started: try again, and send it (reusing the receive-only audio slot). */
+  async retryMic() {
+    const pc = this.pc;
+    if (!pc || this.mic || this.info.state !== "in-call") return;
+    try { this.mic = await getMic(); } catch (e) { this.onEnded(deviceProblem(e, "microphone")); return; }
+    this.mic.getAudioTracks().forEach((t) => { t.enabled = !this.info.muted; pc.addTrack(t, this.mic!); });
+    this.set({ ...this.info, noMic: false });
     await this.renegotiate();
   }
 
@@ -171,6 +181,7 @@ export class Calls {
   }
 
   toggleMute() {
+    if (this.info.noMic) { void this.retryMic(); return; }
     const muted = !this.info.muted;
     this.mic?.getAudioTracks().forEach((t) => { t.enabled = !muted; });
     this.set({ ...this.info, muted });
@@ -279,8 +290,10 @@ export class Calls {
     const { ice_servers } = await api<{ ice_servers: RTCIceServer[] }>("/calls/ice");
     let mic: MediaStream | null = null;
     try {
-      mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    } catch { /* no microphone (or not allowed): you can still listen */ }
+      mic = await getMic();
+    } catch (e) {                                    // you can still listen - but say why
+      this.onEnded(`${deviceProblem(e, "microphone")} You can still hear them.`);
+    }
     if (this.callId !== id) { mic?.getTracks().forEach((t) => t.stop()); throw new Error("Call ended"); }
     const pc = new RTCPeerConnection({ iceServers: ice_servers });
     this.pc = pc;
@@ -295,8 +308,9 @@ export class Calls {
         this.set({ ...this.info, [key]: s });
         const gone = () => { if (this.info[key] === s) this.set({ ...this.info, [key]: null }); };
         ev.track.addEventListener("ended", gone);
-        ev.track.addEventListener("mute", gone);
-        ev.track.addEventListener("unmute", () => this.set({ ...this.info, [key]: s }));
+        // not on "mute": that also happens when frames stop for a moment (a slow connection), and taking
+        // the video away then made it come back dark. Turning a camera off is told by the next offer.
+        ev.track.addEventListener("unmute", () => { if (this.info[key] !== s) this.set({ ...this.info, [key]: s }); });
         return;
       }
       const s = ev.streams[0] ?? new MediaStream([ev.track]);

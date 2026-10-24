@@ -35,7 +35,7 @@ const OTHERS_TTL = 15 * 60_000;        // and a "no" (so a new Jace Official adm
 async function jace<T>(token: string, method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; data: T & { error?: string; error_description?: string } }> {
   try {
     const r = await fetch(`${JACE}${path}`, {
-      method, cache: "no-store", signal: AbortSignal.timeout(15_000),
+      method, cache: "no-store", signal: AbortSignal.timeout(method === "GET" ? 8_000 : 15_000),
       headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });

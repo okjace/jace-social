@@ -543,3 +543,8 @@ select.btn { width: auto; }
 .appeal-result { font-size: 13px; padding: 6px 10px; border-radius: 8px; background: var(--panel2); }
 .ask-kind { display: grid; gap: 8px; margin-top: 8px; }
 .me-panel .who .bot-tag { display: inline-block; vertical-align: middle; }   /* not a whole line like the status under it */
+/* Settings -> Voice & video */
+.mic-meter { flex: 1; height: 8px; border-radius: 4px; background: var(--panel2); overflow: hidden; }
+.mic-meter > div { height: 100%; background: var(--green); transition: width .08s linear; }
+.cam-preview { width: min(320px, 100%); aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
+.cam-preview video { width: 100%; height: 100%; object-fit: cover; }

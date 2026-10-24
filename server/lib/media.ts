@@ -42,9 +42,45 @@ export function readStreams(sdp: string): { sdp: string; kinds: StreamKinds; mov
   return { sdp: lines.join("\r\n"), kinds, moving, noYield };
 }
 
+// --- your microphone and camera (Settings -> Voice & video picks which; saved on this device)
+const MIC_KEY = "jace_social_mic", CAM_KEY = "jace_social_camera";
+const read = (k: string) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
+export const chosenMic = () => read(MIC_KEY);
+export const chosenCamera = () => read(CAM_KEY);
+export function chooseDevice(kind: "mic" | "camera", deviceId: string) {
+  try { if (deviceId) localStorage.setItem(kind === "mic" ? MIC_KEY : CAM_KEY, deviceId); else localStorage.removeItem(kind === "mic" ? MIC_KEY : CAM_KEY); } catch { /* */ }
+}
+
+/** getUserMedia with the chosen device, or the default one if that's gone (unplugged). */
+async function withDevice(kind: "audio" | "video", deviceId: string, base: MediaTrackConstraints): Promise<MediaStream> {
+  const ask = (c: MediaTrackConstraints) => navigator.mediaDevices.getUserMedia(kind === "audio" ? { audio: c, video: false } : { video: c, audio: false });
+  if (deviceId) {
+    try { return await ask({ ...base, deviceId: { exact: deviceId } }); }
+    catch (e) { if (!["OverconstrainedError", "NotFoundError"].includes((e as Error).name)) throw e; }
+  }
+  return ask(base);
+}
+
+/** Your microphone (the chosen one), cleaned up for talking. */
+export function getMic(): Promise<MediaStream> {
+  if (!navigator.mediaDevices?.getUserMedia) return Promise.reject(Object.assign(new Error("no mediaDevices"), { name: "NotSupportedError" }));
+  return withDevice("audio", chosenMic(), { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+}
+
 /** Your camera, at a size that's fine for several people at once. */
 export function getCamera(): Promise<MediaStream> {
-  return navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } }, audio: false });
+  return withDevice("video", chosenCamera(), { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } });
+}
+
+/** Why the microphone or camera didn't start, in words people can act on. */
+export function deviceProblem(e: unknown, what: "microphone" | "camera"): string {
+  const name = (e as Error)?.name ?? "";
+  if (name === "NotAllowedError" || name === "SecurityError")
+    return `Jace Social isn't allowed to use your ${what}. Allow it in your browser's site settings (or your computer's privacy settings), then try again.`;
+  if (name === "NotFoundError" || name === "OverconstrainedError") return `No ${what} was found. Plug one in, or pick another in Settings → Voice & video.`;
+  if (name === "NotReadableError" || name === "AbortError") return `Your ${what} couldn't start - another app may be using it. Close that app, then try again.`;
+  if (name === "NotSupportedError") return `This browser can't use a ${what} here (it needs https).`;
+  return `Couldn't start your ${what}${(e as Error)?.message ? ` (${(e as Error).message})` : ""}.`;
 }
 
 export const canUseCamera = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;

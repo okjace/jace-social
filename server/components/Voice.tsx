@@ -1,6 +1,7 @@
 "use client";
 // Voice room UI: the connected bar in the sidebar, the room view with everyone's tiles and
 // screen shares, and the list of who's in a voice channel.
+import { StreamVideo } from "./StreamVideo";
 import { useEffect, useRef, useState } from "react";
 import type { Person } from "@/lib/client";
 import { canUseCamera } from "@/lib/media";
@@ -13,10 +14,8 @@ export function useVoice(voice: Voice): RoomState {
   return s;
 }
 
-function Video({ stream, muted, mirror }: { stream: MediaStream; muted?: boolean; mirror?: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
-  return <video ref={ref} autoPlay playsInline muted={muted} style={mirror ? { transform: "scaleX(-1)" } : undefined} />;
+function Video({ stream, mirror }: { stream: MediaStream; muted?: boolean; mirror?: boolean }) {
+  return <StreamVideo stream={stream} mirror={mirror} />;
 }
 
 /** "Voice connected" bar above your name, with mute / deafen / screen / leave. */
@@ -32,8 +31,8 @@ export function VoiceBar({ voice, state, onOpen }: { voice: Voice; state: RoomSt
         <button className="icon-btn" title="Leave" onClick={() => void voice.leave()}>📞✕</button>
       </div>
       <div className="voice-bar-buttons">
-        <button className={`btn small${state.muted ? " danger" : ""}`} onClick={() => void voice.toggleMute()} disabled={state.noMic}
-          title={state.noMic ? "No microphone" : state.muted ? "Unmute" : "Mute"}>{state.muted || state.noMic ? "🎙️✕" : "🎙️"}</button>
+        <button className={`btn small${state.muted || state.noMic ? " danger" : ""}`} onClick={() => void voice.toggleMute()}
+          title={state.noMic ? "No microphone - click to try again" : state.muted ? "Unmute" : "Mute"}>{state.muted || state.noMic ? "🎙️✕" : "🎙️"}</button>
         <button className={`btn small${state.deafened ? " danger" : ""}`} onClick={() => void voice.toggleDeafen()} title={state.deafened ? "Undeafen" : "Deafen"}>
           {state.deafened ? "🎧✕" : "🎧"}</button>
         {canUseCamera() && state.canVideo && (
@@ -114,7 +113,8 @@ export function VoiceRoom({ voice, state, channelId, channelName, people, me, ca
         })}
       </div>
       <div className="voice-controls">
-        <button className={`btn${state.muted ? " danger" : ""}`} onClick={() => void voice.toggleMute()} disabled={state.noMic}>{state.muted || state.noMic ? "Unmute" : "Mute"}</button>
+        <button className={`btn${state.muted ? " danger" : ""}`} onClick={() => void voice.toggleMute()} title={state.noMic ? "No microphone - click to try again" : undefined}>
+          {state.noMic ? "🎙️ Try my mic again" : state.muted ? "Unmute" : "Mute"}</button>
         <button className={`btn${state.deafened ? " danger" : ""}`} onClick={() => void voice.toggleDeafen()}>{state.deafened ? "Undeafen" : "Deafen"}</button>
         {canUseCamera() && state.canVideo && <button className={`btn${state.camera ? " primary" : ""}`} onClick={() => void voice.toggleCamera()}>
           {state.camera ? "Turn off camera" : "Turn on camera"}</button>}

@@ -60,8 +60,12 @@ export const GET = handler(async (req) => {
   const p = await me(req);
   await welcomeOnce(p);                              // the Jace bot's first message to them (lib/jaceBot.ts)
   // Jace-linked people: whether their Jace messages are connected (Settings -> Accounts)
-  return { ...own(p), jace_messages: p.jace_sub ? await connectionInfo(p.uuid) : null, jace_staff: await isJaceStaff(p),
-    appeals: await appealsFlag(p) };                 // Jace ban appeals inbox: staff | reconnect | none (lib/appeals.ts)
+  // these may ask Jace (when not remembered): at the same time, not one after another
+  const [jace_messages, jace_staff, appeals] = await Promise.all([
+    p.jace_sub ? connectionInfo(p.uuid) : null, isJaceStaff(p),
+    appealsFlag(p),                                  // Jace ban appeals inbox: staff | reconnect | none (lib/appeals.ts)
+  ]);
+  return { ...own(p), jace_messages, jace_staff, appeals };
 });
 
 const STATUSES = ["online", "idle", "dnd", "invisible"];

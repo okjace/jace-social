@@ -5,7 +5,7 @@
 // two people renegotiate at once, the one with the smaller id gives way ("polite peer").
 // Like direct calls, each description is sent once ICE gathering is done (no trickle).
 import { api } from "./client";
-import { getCamera, readStreams, tagStreams, type StreamKinds } from "./media";
+import { deviceProblem, getCamera, getMic, readStreams, tagStreams, type StreamKinds } from "./media";
 
 export type Participant = { uuid: string; muted: boolean; deafened: boolean; streaming: boolean; person?: { name: string; avatar_url: string | null } };
 export type RoomState = {
@@ -67,11 +67,12 @@ export class Voice {
       ]);
       this.ice = ice_servers;
       try {
-        this.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        this.mic = await getMic();
         if (!room.can_speak) this.mic.getAudioTracks().forEach((t) => { t.enabled = false; });
         this.watchLevel(me, this.mic);
-      } catch {
+      } catch (e) {
         this.set({ noMic: true });
+        this.onError(`${deviceProblem(e, "microphone")} You can still listen.`);   // say why, not just a crossed-out mic
       }
       this.set({ participants: room.participants, muted: !room.can_speak, connecting: false, canVideo: room.can_stream !== false });
       // the one who joins connects to everyone already here
@@ -102,13 +103,32 @@ export class Voice {
   }
 
   async toggleMute() {
+    void this.audioCtx?.resume().catch(() => {});
+    if (this.state.noMic) { await this.retryMic(); return; }
     const muted = !this.state.muted;
     this.mic?.getAudioTracks().forEach((t) => { t.enabled = !muted && !this.state.deafened; });
     this.set({ muted });
     await this.sendState({ muted });
   }
 
+  /** No microphone when joining (not allowed, busy, unplugged): try again, and start sending it. */
+  async retryMic() {
+    if (!this.state.channelId || this.mic) return;
+    try { this.mic = await getMic(); } catch (e) { this.onError(deviceProblem(e, "microphone")); return; }
+    const muted = this.state.muted;                     // (still muted if you can't speak in this room)
+    this.mic.getAudioTracks().forEach((t) => { t.enabled = !muted && !this.state.deafened; });
+    this.watchLevel(this.me, this.mic);
+    this.set({ noMic: false, muted });
+    for (const [uuid, peer] of this.peers) {
+      // reuses the receive-only audio slot each connection was made with
+      this.mic.getAudioTracks().forEach((t) => peer.pc.addTrack(t, this.mic!));
+      await this.renegotiate(uuid);
+    }
+    await this.sendState({ muted });
+  }
+
   async toggleDeafen() {
+    void this.audioCtx?.resume().catch(() => {});
     const deafened = !this.state.deafened;
     for (const p of this.peers.values()) p.audio.muted = deafened;
     this.mic?.getAudioTracks().forEach((t) => { t.enabled = !deafened && !this.state.muted; });
@@ -148,7 +168,7 @@ export class Voice {
       }
       return;
     }
-    try { this.cam = await getCamera(); } catch { this.onError("Couldn't turn on your camera - check that it's connected and allowed"); return; }
+    try { this.cam = await getCamera(); } catch (e) { this.onError(deviceProblem(e, "camera")); return; }
     this.set({ camera: true, cameras: { ...this.state.cameras, [this.me]: this.cam } });
     for (const [uuid, peer] of this.peers) {
       peer.cameraSenders = this.cam.getTracks().map((t) => peer.pc.addTrack(t, this.cam!));
@@ -320,6 +340,7 @@ export class Voice {
   }
 
   private measure() {
+    if (this.audioCtx?.state === "suspended") void this.audioCtx.resume().catch(() => {});   // made before a click: the meters read 0
     const speaking: Record<string, boolean> = {};
     const buf = new Uint8Array(256);
     for (const [uuid, an] of this.analysers) {
