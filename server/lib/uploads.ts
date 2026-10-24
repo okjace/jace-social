@@ -35,3 +35,29 @@ export function cleanAttachments(list: unknown, uuid?: string): Attachment[] {
     return out;
   });
 }
+
+const previewable = (a: Attachment) => /^(image|video|audio)\//.test(a.type);
+
+/**
+ * Editing a message (its text, and its previews turned on or off after sending) -> what to save, and
+ * whether to look for a link preview again. link_preview / file_previews: true or false from the app's
+ * edit box (left out by older apps: a new text gets a new link preview, files stay as they are).
+ */
+export function editChanges(m: { body: string; attachments?: Attachment[] | null; embeds?: unknown[] | null },
+  text: string, b: { link_preview?: unknown; file_previews?: unknown }) {
+  const changes: Record<string, unknown> = {};
+  const textChanged = text !== m.body;
+  if (textChanged) { changes.body = text; changes.edited_at = new Date().toISOString(); }
+  if (typeof b.file_previews === "boolean" && m.attachments?.length) {
+    const files = m.attachments.map((a) => {
+      if (!previewable(a)) return a;
+      const { no_preview: _, ...rest } = a;
+      return b.file_previews ? rest : { ...rest, no_preview: true };
+    });
+    if (JSON.stringify(files) !== JSON.stringify(m.attachments)) changes.attachments = files;
+  }
+  let lookUp = false;
+  if (b.link_preview === false) { if (m.embeds?.length) changes.embeds = []; }
+  else if (textChanged || (b.link_preview === true && !m.embeds?.length)) { changes.embeds = []; lookUp = true; }
+  return { changes, lookUp };
+}

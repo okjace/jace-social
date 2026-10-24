@@ -4,7 +4,7 @@
 import { BotTag, JACE_BOT } from "./JaceBot";
 import { DeleteAccountButton } from "./DeleteAccount";
 import { DELETE_MARK, DELETE_NOW_MARK } from "@/lib/deleteMark";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { timeLabel, type Attachment, type Embed, type Message, type Person, type ReplyPreview, type Role } from "@/lib/client";
 import { EmojiPicker, QUICK_REACTIONS } from "./EmojiPicker";
 import { Link, Markdown, jumboEmoji, type MentionInfo } from "./Markdown";
@@ -14,6 +14,11 @@ export type MessageActions = {
   reply?: () => void; edit?: () => void; remove?: () => void; pin?: () => void; unpin?: () => void;
   react: (emoji: string, on: boolean) => void; copyId?: () => void;
 };
+
+const hasLink = (t: string) => /https?:\/\/\S+\.\S+/i.test(t);
+const previewable = (f: Attachment) => /^(image|video|audio)\//.test(f.type);
+/** Previews turned on or off when editing a message (sent with the edit; see lib/uploads.ts editChanges). */
+export type EditPreviews = { link_preview?: boolean; file_previews?: boolean };
 
 const fmtSize = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
@@ -78,11 +83,25 @@ export function MessageRow({ m, first, sender, mine, mentions, roles, reply, rep
   showEmbeds, editing, onEditSave, onEditCancel, onImage, onOpenProfile, highlight }: {
   m: Message; first: boolean; sender: Person | undefined; mine: boolean; mentions: MentionInfo; roles: Role[];
   reply?: ReplyPreview | null; replySender?: Person; used?: Person; actions: MessageActions; showEmbeds: boolean;
-  editing: boolean; onEditSave: (text: string) => void; onEditCancel: () => void; onImage: (url: string) => void;
+  editing: boolean; onEditSave: (text: string, previews: EditPreviews) => void; onEditCancel: () => void; onImage: (url: string) => void;
   onOpenProfile: (uuid: string) => void; highlight?: boolean;
 }) {
   const [picker, setPicker] = useState(false);
   const [draft, setDraft] = useState(m.body);
+  const [links, setLinks] = useState(true);
+  const [media, setMedia] = useState(true);
+  const hasMedia = !!m.attachments?.some(previewable);
+  useEffect(() => {   // editing starts (✎, or ↑ in the message box): the text and previews as they are now
+    if (!editing) return;
+    setDraft(m.body);
+    setLinks(hasLink(m.body) ? !!m.embeds?.length : true);
+    setMedia(!m.attachments?.some((f) => previewable(f) && f.no_preview));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+  const save = () => onEditSave(draft, {
+    ...(hasLink(draft) || hasLink(m.body) ? { link_preview: links } : {}),
+    ...(hasMedia ? { file_previews: media } : {}),
+  });
   const system = m.kind === "system";
   const ns = nameStyle(sender, roles);
   const pinged = !mine && !system && (m.mention_everyone || (mentions.me && m.mentions?.includes(mentions.me)));
@@ -117,10 +136,14 @@ export function MessageRow({ m, first, sender, mine, mentions, roles, reply, rep
           <div style={{ display: "grid", gap: 6 }}>
             <textarea rows={2} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onEditSave(draft); }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); }
                 if (e.key === "Escape") onEditCancel();
               }} />
-            <div className="small muted">Enter to save · Esc to <button className="icon-btn small" onClick={onEditCancel}>cancel</button></div>
+            {(hasLink(draft) || hasMedia) && <div className="edit-previews small">
+              {hasLink(draft) && <label><input type="checkbox" checked={links} onChange={(e) => setLinks(e.target.checked)} /> Link preview</label>}
+              {hasMedia && <label><input type="checkbox" checked={media} onChange={(e) => setMedia(e.target.checked)} /> File preview</label>}
+            </div>}
+            <div className="small muted">Enter to <button className="icon-btn small" onClick={save}>save</button> · Esc to <button className="icon-btn small" onClick={onEditCancel}>cancel</button></div>
           </div>
         ) : (
           m.body && <div className={`body${jumboEmoji(m.body) ? " jumbo" : ""}`}>
@@ -150,7 +173,7 @@ export function MessageRow({ m, first, sender, mine, mentions, roles, reply, rep
           {QUICK_REACTIONS.slice(0, 3).map((e) => <button key={e} className="icon-btn" title={`React ${e}`} onClick={() => actions.react(e, true)}>{e}</button>)}
           <button className="icon-btn" title="Add a reaction" onClick={() => setPicker(true)}>😀</button>
           {actions.reply && <button className="icon-btn" title="Reply" onClick={actions.reply}>↩</button>}
-          {actions.edit && <button className="icon-btn" title="Edit" onClick={() => { setDraft(m.body); actions.edit!(); }}>✎</button>}
+          {actions.edit && <button className="icon-btn" title="Edit" onClick={actions.edit}>✎</button>}
           {(actions.pin || actions.unpin) && <button className="icon-btn" title={m.pinned_at ? "Unpin" : "Pin"} onClick={m.pinned_at ? actions.unpin : actions.pin}>📌</button>}
           <button className="icon-btn" title="Copy text" onClick={() => navigator.clipboard?.writeText(m.body)}>⧉</button>
           {actions.copyId && <button className="icon-btn" title="Copy message ID" onClick={actions.copyId}>#</button>}

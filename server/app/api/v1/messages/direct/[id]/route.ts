@@ -1,6 +1,7 @@
-// PATCH {body}: edit your own direct message; DELETE: delete it
+// PATCH {body, link_preview?, file_previews?}: edit your own direct message (and turn its previews on or off); DELETE: delete it
 import { ApiError, body, db, handler, me, notify } from "@/lib/server";
 import { previewLater } from "@/lib/embeds";
+import { editChanges } from "@/lib/uploads";
 
 async function load(req: Request, idParam: string) {
   const p = await me(req);
@@ -12,12 +13,15 @@ async function load(req: Request, idParam: string) {
 
 export const PATCH = handler(async (req, ctx) => {
   const { p, m, inbox } = await load(req, (await ctx.params).id);
-  const text = String((await body<{ body?: string }>(req)).body ?? "").trim();
+  const b = await body<{ body?: string; link_preview?: unknown; file_previews?: unknown }>(req);
+  const text = String(b.body ?? "").trim();
   if ((!text && !(m.attachments ?? []).length) || text.length > 2000) throw new ApiError(400, "Messages need 1-2000 characters");
-  await db().from("messages").update({ body: text, edited_at: new Date().toISOString(), embeds: [] }).eq("id", m.id);
+  const { changes, lookUp } = editChanges(m, text, b);
+  if (!Object.keys(changes).length) return { ok: true };
+  await db().from("messages").update(changes).eq("id", m.id);
   const tell = async () => notify([inbox, p.inbox].filter(Boolean) as string[], "dm_update", { from: p.uuid, with: m.recipient, id: m.id, edited: true });
   await tell();
-  previewLater("messages", m.id, text, tell);
+  if (lookUp) previewLater("messages", m.id, text, tell);
   return { ok: true };
 });
 

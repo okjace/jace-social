@@ -574,3 +574,6 @@ select.btn { width: auto; }
 .preview-choice { display: flex !important; gap: 10px; align-items: flex-start; text-transform: none !important; letter-spacing: 0 !important; font-size: 14px !important; color: var(--text) !important; font-weight: 500 !important; }
 .preview-choice input { width: auto; margin-top: 3px; }
 .preview-choice > span { display: grid; gap: 2px; }
+.edit-previews { display: flex; gap: 14px; flex-wrap: wrap; }
+.edit-previews label { display: inline-flex !important; gap: 6px; align-items: center; text-transform: none !important; letter-spacing: 0 !important; font-size: 13px !important; color: var(--text) !important; font-weight: 500 !important; margin: 0; }
+.edit-previews input { width: auto; margin: 0; }

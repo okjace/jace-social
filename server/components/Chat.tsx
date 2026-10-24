@@ -283,9 +283,9 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
               showEmbeds={settings.show_embeds !== false} editing={editing === m.id}
               onOpenProfile={onOpenProfile} onImage={setLightbox}
               onEditCancel={() => setEditing(null)}
-              onEditSave={async (body) => {
+              onEditSave={async (body, previews) => {
                 try {
-                  await api(target.kind === "dm" ? `/messages/direct/${m.id}` : `/messages/${m.id}`, { method: "PATCH", body: { body } });
+                  await api(target.kind === "dm" ? `/messages/direct/${m.id}` : `/messages/${m.id}`, { method: "PATCH", body: { body, ...previews } });
                   setEditing(null); await load();
                 } catch (e) { onError((e as Error).message); }
               }}
