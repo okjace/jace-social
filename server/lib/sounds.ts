@@ -8,7 +8,7 @@
 // hooks the first tap or key press to unlock both Web Audio and an audio element, which the ringing
 // then reuses - otherwise a call could ring in silence.
 
-export type SoundKind = "ringtone" | "calling";
+export type SoundKind = "ringtone" | "calling" | "message";
 type Builtin = { id: string; name: string; period: number; play: (ctx: AudioContext, t: number) => void };
 
 function note(ctx: AudioContext, at: number, len: number, freq: number, type: OscillatorType = "sine", vol = 0.08) {
@@ -26,6 +26,11 @@ function note(ctx: AudioContext, at: number, len: number, freq: number, type: Os
 
 /** The built-in sounds (the same ones work as a ringtone or a calling sound). */
 export const BUILTIN: Builtin[] = [
+  // short ones, made for messages (they work for calls too)
+  { id: "ding", name: "Ding", period: 2000, play: (c, t) => { note(c, t, 0.35, 784, "sine", 0.06); } },
+  { id: "pop", name: "Pop", period: 1500, play: (c, t) => { note(c, t, 0.08, 1200, "sine", 0.09); note(c, t + 0.03, 0.12, 600, "sine", 0.05); } },
+  { id: "blip", name: "Blip", period: 1500, play: (c, t) => { note(c, t, 0.07, 988, "triangle", 0.08); note(c, t + 0.09, 0.1, 1319, "triangle", 0.08); } },
+  { id: "knock", name: "Knock", period: 1500, play: (c, t) => { note(c, t, 0.06, 180, "triangle", 0.25); note(c, t + 0.16, 0.06, 180, "triangle", 0.25); } },
   { id: "classic", name: "Classic", period: 2000, play: (c, t) => { note(c, t, 0.25, 880); note(c, t + 0.35, 0.25, 880); } },
   { id: "dial", name: "Dial tone", period: 3000, play: (c, t) => { note(c, t, 0.9, 440, "sine", 0.07); } },
   { id: "chime", name: "Chime", period: 2400, play: (c, t) => { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => note(c, t + i * 0.14, 0.6, f)); } },
@@ -34,7 +39,7 @@ export const BUILTIN: Builtin[] = [
   { id: "soft", name: "Soft", period: 3200, play: (c, t) => { note(c, t, 1.4, 392, "sine", 0.06); note(c, t + 0.2, 1.2, 587.33, "sine", 0.04); } },
   { id: "pulse", name: "Pulse", period: 1500, play: (c, t) => { note(c, t, 0.12, 1000, "square", 0.03); note(c, t + 0.2, 0.12, 1000, "square", 0.03); note(c, t + 0.4, 0.12, 1000, "square", 0.03); } },
 ];
-export const DEFAULT_SOUND: Record<SoundKind, string> = { ringtone: "builtin:classic", calling: "builtin:dial" };
+export const DEFAULT_SOUND: Record<SoundKind, string> = { ringtone: "builtin:classic", calling: "builtin:dial", message: "builtin:ding" };
 
 let ctx: AudioContext | null = null;
 let el: HTMLAudioElement | null = null;
@@ -81,8 +86,27 @@ export function startSound(choice: string | null | undefined, kind: SoundKind): 
   return { stop() { clearInterval(timer); } };
 }
 
+/** A message sound: once (a file plays up to 4 s). louder: a mention or a direct message. */
+export function playOnce(choice: string | null | undefined, kind: SoundKind = "message") {
+  const pick = choice || DEFAULT_SOUND[kind];
+  if (pick === "builtin:none") return;
+  if (/^https?:\/\//.test(pick)) {
+    const a = new Audio(pick);
+    a.volume = 0.8;
+    void a.play().catch(() => playOnce(DEFAULT_SOUND[kind], kind));
+    setTimeout(() => a.pause(), 4000);
+    return;
+  }
+  const b = BUILTIN.find((x) => `builtin:${x.id}` === pick) ?? BUILTIN.find((x) => `builtin:${x.id}` === DEFAULT_SOUND[kind])!;
+  const c = audioCtx();
+  if (!c) return;
+  void c.resume().catch(() => {});
+  b.play(c, c.currentTime + 0.02);
+}
+
 /** Play a sound once or twice to hear it (Settings -> Sounds). Stops after a few seconds. */
 export function previewSound(choice: string, kind: SoundKind) {
+  if (kind === "message") { playOnce(choice, kind); return { stop() {} }; }
   const s = startSound(choice, kind);
   setTimeout(() => s.stop(), 4000);
   return s;

@@ -60,6 +60,7 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   // call sounds (lib/sounds.ts): a built-in one, or a sound file uploaded to Jace Social
   ringtone: (v) => soundChoice(v),
   calling_sound: (v) => soundChoice(v),
+  message_sound: (v) => soundChoice(v),
 };
 
 export const GET = handler(async (req) => {

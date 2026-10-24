@@ -22,7 +22,7 @@ import { hasAgreed, LegalDialog } from "./Legal";
 import { isDeletingAccount, RecoveryNotice } from "./DeleteAccount";
 import { Appeals, type AppealRow } from "./Appeals";
 import { AddFriendForm } from "./AddFriend";
-import { unlockSounds } from "@/lib/sounds";
+import { playOnce, unlockSounds } from "@/lib/sounds";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
 import { Announcements, BotTag, Broadcast, Docs, JACE_BOT, JaceInbox, JaceTabs, inboxPerson, type InboxEntry, type JaceTab } from "./JaceBot";
@@ -138,19 +138,6 @@ function SignIn({ error, inviteCode }: { error: string; inviteCode?: string }) {
 }
 
 
-/** A soft "ding" for messages and mentions (Settings -> Notifications -> Sounds). */
-function ding(high = false) {
-  try {
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.frequency.value = high ? 1046 : 784;
-    g.gain.setValueAtTime(0.06, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-    o.connect(g).connect(ctx.destination);
-    o.start(); o.stop(ctx.currentTime + 0.35);
-    setTimeout(() => void ctx.close(), 600);
-  } catch { /* no audio */ }
-}
 
 const COLLAPSED = "jace_social_collapsed";
 
@@ -194,7 +181,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
     if (s.notify === "mentions" && !opts.important) return;
     if (opts.muteKey?.some((k) => s.muted?.includes(k)) && !opts.important) return;
     if (document.hasFocus()) return;
-    if (s.sounds !== false) ding(opts.important);
+    if (s.sounds !== false) playOnce(s.message_sound, "message");   // your message sound (Settings -> Sounds)
     if (s.desktop_notifications === false) return;
     const d = desktop();
     if (d) d.notify(title, body);

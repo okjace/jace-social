@@ -63,6 +63,16 @@ assert.equal(s.ringtone, up.sound.url);
 assert.equal(s.calling_sound, "builtin:chime");
 assert.equal((await api(bob.token, "/sounds?kind=ringtone")).sounds[0].uses, 1);
 
+step("message sounds: upload one and use it");
+const msg = await api(alice.token, "/sounds?name=Pling&kind=message&public=1", { raw: wav(0.2) });
+assert.equal(msg.sound.kind, "message");
+assert.equal((await api(bob.token, "/sounds?kind=message")).sounds[0].name, "Pling");
+await api(bob.token, "/me", { method: "PATCH", body: { settings: { message_sound: msg.sound.url } } });
+assert.equal((await api(bob.token, "/me")).settings.message_sound, msg.sound.url);
+await api(bob.token, "/me", { method: "PATCH", body: { settings: { message_sound: "builtin:pop" } } });
+assert.equal((await api(bob.token, "/me")).settings.message_sound, "builtin:pop");
+await api(alice.token, `/sounds/${msg.sound.id}`, { method: "DELETE" });
+
 step("only real sounds can be chosen");
 await api(bob.token, "/me", { method: "PATCH", body: { settings: { ringtone: "https://evil.example/x.mp3" } } });
 assert.equal((await api(bob.token, "/me")).settings.ringtone, null);
