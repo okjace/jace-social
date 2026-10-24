@@ -21,7 +21,8 @@ export function AddAccountModal({ me, onClose }: { me: Me; onClose: () => void }
       if (!r.ok) throw new Error(m.error ?? "Couldn't sign in");
       if (m.uuid === me.uuid) { setNote(""); setError("That's the account you're using now. Sign in with a different one."); return; }
       rememberAccount({ uuid: m.uuid, name: m.name, avatar_url: m.avatar_url, is_bot: m.is_bot }, token);
-      switchAccount(m.uuid);
+      const problem = await switchAccount(m.uuid);
+      if (problem) { setNote(""); setError(problem); }
     } catch (e) { setNote(""); setError((e as Error).message); }
   }
 

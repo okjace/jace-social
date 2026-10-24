@@ -78,7 +78,7 @@ export function MyBots({ onError }: { onError: Err }) {
             try {
               const s = await api<{ token: string; uuid: string; name: string; avatar_url: string | null }>(`/bots/${b.uuid}/session`, { body: {} });
               rememberAccount({ uuid: s.uuid, name: s.name, avatar_url: s.avatar_url, is_bot: true }, s.token);
-              if (confirm(`Switch to ${b.name} now? You can switch back from the account menu.`)) switchAccount(s.uuid);
+              if (confirm(`Switch to ${b.name} now? You can switch back from Settings → Bot.`)) { const problem = await switchAccount(s.uuid); if (problem) onError(problem); }
             } catch (e) { onError((e as Error).message); }
           }}>Switch to this bot</button>
           <button className="btn small" onClick={async () => {

@@ -263,7 +263,7 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
           {tab === "bot" && me.is_bot && <>
             <h2>Bot</h2>
             <p>You&apos;re signed in as the bot <b>{me.name}</b>. What you send, it sends.</p>
-            <BackToMyAccount me={me} onAdd={() => setAdding(true)} />
+            <BackToMyAccount me={me} onAdd={() => setAdding(true)} onError={onError} />
             {adding && <AddAccountModal me={me} onClose={() => setAdding(false)} />}
             <h2 style={{ marginTop: 8 }}>Switch accounts</h2>
             <AccountSwitcher me={me} onError={onError} noBack />
@@ -509,21 +509,25 @@ export function JaceMessagesCard({ me, onConnect, onError }: { me: Me; onConnect
 
 type MyBot = { uuid: string; name: string; avatar_url: string | null; official?: boolean };
 
-/** Switch to one of your bots: a session for it (kept on this device), then switch. */
+/** Switch to one of your bots: always a fresh session for it (an old saved one may have stopped
+ *  working - a new bot token ends them), kept on this device, then switch. */
 async function switchToBot(b: MyBot, onError: Err) {
-  if (savedAccounts().some((a) => a.uuid === b.uuid)) { switchAccount(b.uuid); return; }
   try {
     const s = await api<{ token: string; uuid: string; name: string; avatar_url: string | null }>(`/bots/${b.uuid}/session`, { body: {} });
     rememberAccount({ uuid: s.uuid, name: s.name, avatar_url: s.avatar_url, is_bot: true }, s.token);
-    switchAccount(s.uuid);
+    const problem = await switchAccount(s.uuid);
+    if (problem) onError(problem);
   } catch (e) { onError((e as Error).message); }
 }
 
 /** Signed in as a bot: back to the account that owns it (saved on this device), or sign in to it. */
-export function BackToMyAccount({ me, onAdd }: { me: Me; onAdd: () => void }) {
+export function BackToMyAccount({ me, onAdd, onError = (m) => alert(m) }: { me: Me; onAdd: () => void; onError?: Err }) {
   const owner = savedAccounts().find((a) => a.uuid === me.bot_owner) ?? savedAccounts().find((a) => !a.is_bot);
   return owner
-    ? <button className="btn primary" onClick={() => switchAccount(owner.uuid)}>← Back to your account ({owner.name})</button>
+    ? <button className="btn primary" onClick={async () => {
+        const problem = await switchAccount(owner.uuid);
+        if (problem) { onError(problem); onAdd(); }                // expired: sign in to it again
+      }}>← Back to your account ({owner.name})</button>
     : <button className="btn primary" onClick={onAdd}>← Sign in to your account</button>;
 }
 
@@ -544,13 +548,18 @@ export function AccountSwitcher({ me, compact, onError = () => {}, noBack }: { m
   const unsavedBots = bots.filter((b) => !list.some((a) => a.uuid === b.uuid));
   return (
     <div className="account-list">
-      {me.is_bot && !noBack && <BackToMyAccount me={me} onAdd={() => setAdding(true)} />}
+      {me.is_bot && !noBack && <BackToMyAccount me={me} onAdd={() => setAdding(true)} onError={onError} />}
       {list.map((a) => (
         <div key={a.uuid} className={`account-row${a.uuid === me.uuid ? " current" : ""}`}>
           <Avatar p={{ name: a.name, avatar_url: a.avatar_url }} size={compact ? 28 : 36} />
           <div className="grow"><b>{a.name}</b><BotTag p={a} style={{ marginLeft: 6 }} />
             {a.uuid === me.uuid && <div className="muted small">Signed in</div>}</div>
-          {a.uuid !== me.uuid && <button className="btn small primary" onClick={() => switchAccount(a.uuid)}>Switch</button>}
+          {a.uuid !== me.uuid && <button className="btn small primary" onClick={async () => {
+            const bot = bots.find((b) => b.uuid === a.uuid);
+            if (bot) { await switchToBot(bot, onError); return; }  // your bot: a fresh sign-in for it
+            const problem = await switchAccount(a.uuid);
+            if (problem) { onError(problem); setList(savedAccounts()); }
+          }}>Switch</button>}
           {a.uuid !== me.uuid && <button className="icon-btn" title="Remove from this device" onClick={() => { forgetAccount(a.uuid); setList(savedAccounts()); }}>✕</button>}
         </div>
       ))}
