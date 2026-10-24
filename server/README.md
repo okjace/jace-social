@@ -15,7 +15,7 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 
 1. **Supabase:** create a free project at <https://supabase.com>.
    - **Security options when creating the project:** Data API **on**, "Automatically expose new tables" **off**, automatic RLS **on**.
-   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace), `supabase/008_jace_bot.sql` (the official Jace bot), `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones) `supabase/010_account_deletion.sql` (deleting your account through the Jace bot, recoverable for 10 days) and `supabase/011_deleted_handle.sql` (deleting frees your @handle) and `supabase/012_deleted_logins.sql` (remembers deleted Jace logins for good; "([DELETE-NOW])") `supabase/013_jace_appeals.sql` (Jace ban appeals) `supabase/014_jace_admins.sql` (Jace admins are admins here) `supabase/015_sounds.sql` (custom sounds and the community library) and `supabase/016_bigger_files.sql` (50 MB files). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
+   - **SQL Editor:** run `supabase/schema.sql`, then `supabase/002_calls.sql`, then `supabase/003_social.sql`, then `supabase/004_community.sql`, then `supabase/005_code_bots.sql`, `supabase/006_handles.sql` (everyone's @handle), `supabase/007_jace_messages.sql` (syncing messages with Jace), `supabase/008_jace_bot.sql` (the official Jace bot), `supabase/009_animated_pictures.sql` (4 MB pictures, for animated ones) `supabase/010_account_deletion.sql` (deleting your account through the Jace bot, recoverable for 10 days) and `supabase/011_deleted_handle.sql` (deleting frees your @handle) and `supabase/012_deleted_logins.sql` (remembers deleted Jace logins for good; "([DELETE-NOW])") `supabase/013_jace_appeals.sql` (Jace ban appeals) `supabase/014_jace_admins.sql` (Jace admins are admins here) `supabase/015_sounds.sql` (custom sounds and the community library), `supabase/016_bigger_files.sql` (50 MB files) and `supabase/017_storage.sql` (uploads over several storage services). 003 adds Jace accounts, profiles, group chats, servers and the `avatars` storage bucket. 004 adds roles and permissions, replies, reactions, files (the `attachments` bucket), moderation, custom invite links, onboarding, voice channels and bots. Each file is safe to run again.
    - **Realtime → Settings:** make sure public channel access is allowed (it's the default).
    - **Project Settings → API Keys:** copy the project URL, the **publishable** key and the **secret** key.
 2. **Vercel:** New Project, then import `okjace/jace-social`.
@@ -46,6 +46,14 @@ and Unban or Keep banned. See `lib/appeals.ts`; test: `scripts/test-appeals.mjs`
   clicker's own token passed the appeals check again. Mutes can only be lifted on Jace.
 - **Notifications:** the 5-minute cron run polls each staff member's appeals and sends one `appeal`
   event per new message from an appealing person.
+
+## Storage
+
+Uploads (message files, pictures, backgrounds, sounds) go to Cloudflare R2, then Backblaze B2, then
+Supabase - the first one set up that takes the file and still has room (`lib/storage.ts`,
+`supabase/017_storage.sql` keeps how much each holds). Files can be up to 500 MB on R2/B2 and 50 MB on
+Supabase. Settings: `R2_*` and `B2_*` in `.env.example`; without them everything goes to Supabase.
+Test with a stand-in for R2: `scripts/mock-s3.mjs` and `scripts/test-storage.mjs`.
 
 ## Jace admins and your Jace profile
 

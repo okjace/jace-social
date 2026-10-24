@@ -9,6 +9,8 @@ del() { curl -sS -o /dev/null -w "$1 %{http_code}\n" -X DELETE "$SUPABASE_URL/re
   -H "apikey: $SUPABASE_SECRET_KEY" -H "Authorization: Bearer $SUPABASE_SECRET_KEY"; }
 del jace_message_links "jace_id=not.is.null"
 del jace_deleted_logins "jace_sub=not.is.null"   # (012) deleted Jace logins
+del storage_files "url=not.is.null"           # (017) where uploads went
+del storage_usage "provider=not.is.null"
 del channels "id=not.is.null"          # group chats and their messages, Jace group links
 del oauth_requests "state=not.is.null"
 del profiles "uuid=not.is.null"        # people, and everything that's theirs

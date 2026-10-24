@@ -4,6 +4,7 @@
 // DELETE: delete it - yours, or anyone's for the people running the Jace bot (community moderation)
 import { ApiError, body, db, handler, me } from "@/lib/server";
 import { isJaceStaff } from "@/lib/jaceBot";
+import { removeFile } from "@/lib/storage";
 
 async function sound(id: string) {
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new ApiError(404, "Sound not found");
@@ -38,7 +39,6 @@ export const DELETE = handler(async (req, ctx) => {
   const s = await sound((await ctx.params).id);
   if (s.owner !== p.uuid && !(await isJaceStaff(p))) throw new ApiError(403, "That's not your sound");
   await db().from("sounds").delete().eq("id", s.id);
-  const path = s.url.split("/storage/v1/object/public/sounds/")[1];
-  if (path) await db().storage.from("sounds").remove([decodeURIComponent(path)]);
+  await removeFile(s.url);                         // wherever it's stored (lib/storage.ts)
   return { ok: true };
 });

@@ -5,6 +5,7 @@
 //   upload one -> {sound}. public=1 shares it in the community library.
 import { randomBytes } from "node:crypto";
 import { ApiError, db, handler, me } from "@/lib/server";
+import { putFile } from "@/lib/storage";
 
 const TYPES: Record<string, string> = {
   "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/ogg": "ogg", "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav",
@@ -51,10 +52,7 @@ export const POST = handler(async (req) => {
   const bytes = new Uint8Array(await req.arrayBuffer());
   if (!bytes.length) throw new ApiError(400, "The file is empty");
   if (bytes.length > 1024 * 1024) throw new ApiError(413, "Sounds can be up to 1 MB (a short clip is best)");
-  const path = `${p.uuid}/${randomBytes(8).toString("hex")}.${TYPES[type]}`;
-  const { error: upErr } = await db().storage.from("sounds").upload(path, bytes, { contentType: type, upsert: false });
-  if (upErr) throw new ApiError(500, `Couldn't save the sound (${upErr.message})`);
-  const url = db().storage.from("sounds").getPublicUrl(path).data.publicUrl;
+  const url = await putFile(p.uuid, "sounds", `${p.uuid}/${randomBytes(8).toString("hex")}.${TYPES[type]}`, bytes, type);   // lib/storage.ts
   const { data, error } = await db().from("sounds").insert({ owner: p.uuid, name, kind, url, public: q.get("public") === "1" })
     .select(columns).single();
   if (error) throw error;

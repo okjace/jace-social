@@ -118,15 +118,23 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
     if (!has(can, P.ATTACH)) return onError("You can't attach files here");
     const list = [...files].slice(0, 10 - uploads.length);
     for (const file of list) {
-      if (file.size > 50 * 1024 * 1024) { onError(`${file.name} is bigger than 50 MB`); continue; }
+      if (file.size > 500 * 1024 * 1024) { onError(`${file.name} is bigger than 500 MB`); continue; }   // (the server says the real limit)
       const id = Math.random().toString(36).slice(2);
       const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
       setUploads((u) => [...u, { id, file, progress: "uploading", preview }]);
       try {
-        const s = await api<{ path: string; token: string; url: string }>("/uploads", { body: { name: file.name, type: file.type || "application/octet-stream", size: file.size } });
-        const sb = createClient(me.realtime.url, me.realtime.key, { auth: { persistSession: false } });
-        const { error } = await sb.storage.from("attachments").uploadToSignedUrl(s.path, s.token, file, { contentType: file.type || "application/octet-stream" });
-        if (error) throw new Error(error.message);
+        const type = file.type || "application/octet-stream";
+        // the server picks the storage service (lib/storage.ts): Supabase, or a signed URL on R2 / B2
+        const s = await api<{ provider: string; url: string; upload_url: string; path?: string; token?: string; headers?: Record<string, string> }>(
+          "/uploads", { body: { name: file.name, type, size: file.size } });
+        if (s.provider === "supabase") {
+          const sb = createClient(me.realtime.url, me.realtime.key, { auth: { persistSession: false } });
+          const { error } = await sb.storage.from("attachments").uploadToSignedUrl(s.path!, s.token!, file, { contentType: type });
+          if (error) throw new Error(error.message);
+        } else {
+          const r = await fetch(s.upload_url, { method: "PUT", headers: s.headers ?? { "Content-Type": type }, body: file });
+          if (!r.ok) throw new Error(`storage answered ${r.status}`);
+        }
         let dims: { width?: number; height?: number } = {};
         if (preview) dims = await new Promise((ok) => { const img = new Image(); img.onload = () => ok({ width: img.naturalWidth, height: img.naturalHeight }); img.onerror = () => ok({}); img.src = preview; });
         const att: Attachment = { url: s.url, name: file.name, type: file.type || "application/octet-stream", size: file.size, ...dims };

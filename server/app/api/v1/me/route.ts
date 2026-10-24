@@ -9,6 +9,7 @@ import { connectionInfo } from "@/lib/jaceSync";
 import { deleteAccount } from "@/lib/accountDeletion";
 import { appealsFlag } from "@/lib/appeals";
 import { MAX_LINKS, socialOf } from "@/lib/socialLinks";
+import { isOurFile } from "@/lib/storage";
 import { pushProfileToJace } from "@/lib/jaceAdmin";
 import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
@@ -32,8 +33,7 @@ function handleChangeAt(p: Profile): string | null {
   return next > Date.now() ? new Date(next).toISOString() : null;
 }
 
-const soundChoice = (v: unknown) => (typeof v === "string" && (/^builtin:[a-z]{2,20}$/.test(v)
-  || v.startsWith(`${supabaseUrl()}/storage/v1/object/public/sounds/`)) ? v : null);
+const soundChoice = (v: unknown) => (typeof v === "string" && (/^builtin:[a-z]{2,20}$/.test(v) || isOurFile(v, "sounds")) ? v : null);
 
 // Private settings that follow you to every device. Unknown keys are dropped.
 const SETTINGS: Record<string, (v: unknown) => unknown> = {
@@ -55,7 +55,7 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   developer: (v) => Boolean(v),
   // Appearance: a background picture (only one uploaded to /me/background), how solid the panels
   // stay over it, and your own CSS (applied only in your own app)
-  background: (v) => (typeof v === "string" && v.startsWith(`${supabaseUrl()}/storage/v1/object/public/avatars/backgrounds/`) ? v : null),
+  background: (v) => (isOurFile(v, "avatars", "backgrounds/") ? v : null),
   background_opacity: (v) => Math.max(0.2, Math.min(1, Number(v) || 0.8)),
   custom_css: (v) => String(v ?? "").slice(0, 20_000),
   // call sounds (lib/sounds.ts): a built-in one, or a sound file uploaded to Jace Social
