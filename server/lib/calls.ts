@@ -4,6 +4,7 @@
 // Like the launcher, each side sends its full description once ICE gathering is done
 // (no trickle), and audio goes straight between players or through the TURN relay.
 import { api } from "./client";
+import { startSound } from "./sounds";
 import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, readStreams, tagStreams, type StreamKinds } from "./media";
 
 export type CallState = "idle" | "calling" | "ringing" | "in-call";
@@ -45,6 +46,9 @@ export class Calls {
   private ring: { stop: () => void } | null = null;
   private listeners = new Set<(i: CallInfo) => void>();
   private relay = false;
+  private sounds: { ringtone?: string | null; calling?: string | null } = {};
+  private watching: ReturnType<typeof setInterval> | null = null;
+  private onVisible = () => { if (!document.hidden) void this.checkRinging(); };
   private seen = new Set<number>();               // signals already handled (live event and catch-up)
   private lastSeen = 0;
   private poll: ReturnType<typeof setInterval> | null = null;
@@ -55,6 +59,30 @@ export class Calls {
 
   subscribe(fn: (i: CallInfo) => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
 
+  /** Your ringtone and calling sound (settings ringtone / calling_sound - lib/sounds.ts). */
+  setSounds(s: { ringtone?: string | null; calling?: string | null }) { this.sounds = s; }
+
+  /** While the app is open: look for calls ringing for us every few seconds, and as soon as the page
+   *  is shown again - phones (iPhone Safari) drop live events in the background, so a call didn't ring. */
+  watch() {
+    if (this.watching || typeof document === "undefined") return;
+    this.watching = setInterval(() => { if (!document.hidden) void this.checkRinging(); }, 4000);
+    document.addEventListener("visibilitychange", this.onVisible);
+    void this.checkRinging();
+  }
+  unwatch() {
+    if (this.watching) clearInterval(this.watching);
+    this.watching = null;
+    document.removeEventListener("visibilitychange", this.onVisible);
+  }
+  private async checkRinging() {
+    if (this.info.state !== "idle") return;
+    try {
+      const { signals } = await api<{ signals: Signal[] }>("/calls?ringing=1");
+      for (const s of signals) if (this.info.state === "idle" && !this.seen.has(s.id)) await this.onSignal(s);
+    } catch { /* next time */ }
+  }
+
   static supported() { return typeof window !== "undefined" && "RTCPeerConnection" in window && !!navigator.mediaDevices?.getUserMedia; }
 
   async call(uuid: string, name: string) {
@@ -64,7 +92,7 @@ export class Calls {
     this.callerSide = true;
     const id = this.callId;
     this.set({ ...IDLE, state: "calling", peer: uuid, peerName: name });
-    this.ring = tone("outgoing");
+    this.ring = startSound(this.sounds.calling, "calling");
     try {
       const pc = await this.newPeer(id);
       const sdp = await describe(pc, await pc.createOffer());
@@ -214,7 +242,7 @@ export class Calls {
         this.callId = e.call_id;
         this.offerSdp = signal.sdp;
         this.set({ ...IDLE, state: "ringing", peer: signal.sender, peerName: signal.name || e.name || "A friend" });
-        this.ring = tone("incoming");
+        this.ring = startSound(this.sounds.ringtone, "ringtone");
         this.startTimeout();
         this.onIncoming(this.info.peerName);
       } catch { /* the offer expired */ }
@@ -404,28 +432,4 @@ function describe(pc: RTCPeerConnection, desc: RTCSessionDescriptionInit): Promi
   return describeWhenReady(pc, desc, hasRelay(pc.getConfiguration().iceServers ?? []));
 }
 
-/** A soft ringing sound: two short beeps every 2 s (incoming), or one longer tone (outgoing). */
-function tone(kind: "incoming" | "outgoing"): { stop: () => void } {
-  let ctx: AudioContext | null = null;
-  try { ctx = new AudioContext(); } catch { return { stop() {} }; }
-  const beep = (at: number, len: number, freq: number) => {
-    const o = ctx!.createOscillator();
-    const g = ctx!.createGain();
-    o.frequency.value = freq;
-    g.gain.setValueAtTime(0, at);
-    g.gain.linearRampToValueAtTime(0.08, at + 0.02);
-    g.gain.setValueAtTime(0.08, at + len - 0.05);
-    g.gain.linearRampToValueAtTime(0, at + len);
-    o.connect(g).connect(ctx!.destination);
-    o.start(at);
-    o.stop(at + len);
-  };
-  const play = () => {
-    if (!ctx) return;
-    const t = ctx.currentTime + 0.05;
-    if (kind === "incoming") { beep(t, 0.25, 880); beep(t + 0.35, 0.25, 880); } else beep(t, 0.9, 440);
-  };
-  play();
-  const timer = setInterval(play, kind === "incoming" ? 2000 : 3000);
-  return { stop() { clearInterval(timer); void ctx?.close(); ctx = null; } };
-}
+

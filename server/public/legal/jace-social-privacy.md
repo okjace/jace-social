@@ -16,6 +16,10 @@ Your messages, files, reactions, servers, group chats and friends are stored so 
 
 Your settings (theme, accent color, background picture, custom CSS, notifications and the rest) are saved with your account so they follow you to every device. Your background picture is stored like a profile picture: anyone with its link could open it. Your custom CSS only changes how Jace Social looks for you.
 
+## Call sounds
+
+Ringtones and calling sounds you upload are stored like pictures: anyone with a sound's link could play it. If you share one in the community library, everyone on Jace Social can find it, see your @handle next to it, and use it. Delete a sound any time in Settings → Sounds.
+
 ## Jace messages
 
 When you sign in with Jace (or link it), Jace Social can sync your direct messages and group chats with your Jace account at jaceo.vercel.app. It's **off until you turn it on** (Settings → Accounts → Jace messages); signing in never imports anything by itself. When it's on:

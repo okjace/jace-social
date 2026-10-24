@@ -22,6 +22,7 @@ import { hasAgreed, LegalDialog } from "./Legal";
 import { isDeletingAccount, RecoveryNotice } from "./DeleteAccount";
 import { Appeals, type AppealRow } from "./Appeals";
 import { AddFriendForm } from "./AddFriend";
+import { unlockSounds } from "@/lib/sounds";
 import { MobileUpdate } from "./MobileUpdate";
 import { NewVersion } from "./NewVersion";
 import { Announcements, BotTag, Broadcast, Docs, JACE_BOT, JaceInbox, JaceTabs, inboxPerson, type InboxEntry, type JaceTab } from "./JaceBot";
@@ -204,6 +205,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
   }, []);
   const [calls] = useState(() => new Calls(err, (name) => notifyUser(`${name} is calling`, "Open Jace Social to answer", { important: true })));
   const call = useCall(calls);
+  // calls ring even when a live event was missed (phones in the background), with your own sounds,
+  // and phones are allowed to play them (unlocked on your first tap)
+  useEffect(() => { unlockSounds(); calls.watch(); return () => calls.unwatch(); }, [calls]);
+  useEffect(() => { calls.setSounds({ ringtone: settings.ringtone, calling: settings.calling_sound }); }, [calls, settings.ringtone, settings.calling_sound]);
   // Jace Launcher (voice only) sends people here to see video: #move_call=<call id>&peer=<uuid>&name=<name>
   // ...or to join a voice room here: #join_voice=<channel id>&server=<server id or empty>&name=<channel name>
   const [moveCall, setMoveCall] = useState<{ id: string; peer: string; name: string } | null>(null);

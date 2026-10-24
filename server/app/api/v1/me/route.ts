@@ -31,6 +31,9 @@ function handleChangeAt(p: Profile): string | null {
   return next > Date.now() ? new Date(next).toISOString() : null;
 }
 
+const soundChoice = (v: unknown) => (typeof v === "string" && (/^builtin:[a-z]{2,20}$/.test(v)
+  || v.startsWith(`${supabaseUrl()}/storage/v1/object/public/sounds/`)) ? v : null);
+
 // Private settings that follow you to every device. Unknown keys are dropped.
 const SETTINGS: Record<string, (v: unknown) => unknown> = {
   theme: (v) => (["dark", "light", "midnight", "forest", "system"].includes(String(v)) ? v : "dark"),
@@ -54,6 +57,9 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
   background: (v) => (typeof v === "string" && v.startsWith(`${supabaseUrl()}/storage/v1/object/public/avatars/backgrounds/`) ? v : null),
   background_opacity: (v) => Math.max(0.2, Math.min(1, Number(v) || 0.8)),
   custom_css: (v) => String(v ?? "").slice(0, 20_000),
+  // call sounds (lib/sounds.ts): a built-in one, or a sound file uploaded to Jace Social
+  ringtone: (v) => soundChoice(v),
+  calling_sound: (v) => soundChoice(v),
 };
 
 export const GET = handler(async (req) => {

@@ -1,6 +1,8 @@
 // POST {to, call_id, kind: offer|answer|hangup|renegotiate|reanswer, sdp?}: send call setup to a friend
 //   (renegotiate/reanswer: a new description mid-call, e.g. when screen sharing starts)
 // GET ?id=<signal id>: read a call signal sent to you (the live event only carries its id)
+// GET ?ringing=1: calls ringing for you right now (an offer in the last 45 s that nobody answered or
+//   hung up) - the app checks every few seconds, since phones drop live events in the background
 // GET ?call_id=&after=<signal id>: the signals of that call sent to you after that one (newest 20) -
 //   the app checks every few seconds during a call, in case a live event was missed
 import { ApiError, areFriends, body, cleanUuid, db, handler, me, notify } from "@/lib/server";
@@ -36,6 +38,17 @@ export const POST = handler(async (req) => {
 export const GET = handler(async (req) => {
   const p = await me(req);
   const q = new URL(req.url).searchParams;
+  if (q.get("ringing")) {
+    const since = new Date(Date.now() - 45_000).toISOString();
+    const { data: offers, error } = await db().from("call_signals").select("id, call_id, sender, kind")
+      .eq("recipient", p.uuid).eq("kind", "offer").gt("created_at", since).order("id", { ascending: false }).limit(5);
+    if (error) throw error;
+    if (!offers?.length) return { signals: [] };
+    const { data: done } = await db().from("call_signals").select("call_id, sdp")
+      .in("call_id", offers.map((o) => o.call_id)).in("kind", ["answer", "hangup"]);
+    const finished = new Set((done ?? []).map((d) => d.call_id));
+    return { signals: offers.filter((o) => !finished.has(o.call_id)).map((o) => ({ id: o.id, kind: "offer", call_id: o.call_id, from: o.sender })) };
+  }
   const callId = q.get("call_id");
   if (callId) {
     if (!/^[A-Za-z0-9_-]{8,64}$/.test(callId)) throw new ApiError(400, "Bad call id");

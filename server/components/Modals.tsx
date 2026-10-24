@@ -7,6 +7,7 @@ import { BotActivity, MyBots } from "./Bots";
 import { forgetAccount, rememberAccount, savedAccounts, switchAccount } from "@/lib/accounts";
 import { AddAccountModal } from "./AddAccount";
 import { VoiceSettings } from "./VoiceSettings";
+import { SoundSettings } from "./SoundSettings";
 import { DeleteAccountCard } from "./DeleteAccount";
 import { ACCENTS, applySettings, cssDisabled, THEME_NAMES } from "@/lib/theme";
 import {
@@ -120,8 +121,8 @@ function BanButtons({ p, onChanged, onError }: { p: FullProfile; onChanged: () =
 // ---------------------------------------------------------------------------------
 // Your settings: profile, status, linked accounts
 // ---------------------------------------------------------------------------------
-export type SettingsTab = "bot" | "profile" | "status" | "appearance" | "voice" | "notifications" | "links" | "accounts" | "bots" | "advanced";
-const TAB_NAMES: [SettingsTab, string][] = [["bot", "Bot"], ["profile", "My profile"], ["status", "Status"], ["appearance", "Appearance"], ["voice", "Voice & video"],
+export type SettingsTab = "bot" | "profile" | "status" | "appearance" | "voice" | "sounds" | "notifications" | "links" | "accounts" | "bots" | "advanced";
+const TAB_NAMES: [SettingsTab, string][] = [["bot", "Bot"], ["profile", "My profile"], ["status", "Status"], ["appearance", "Appearance"], ["voice", "Voice & video"], ["sounds", "Sounds"],
   ["notifications", "Notifications"], ["links", "Links & privacy"], ["accounts", "Accounts"], ["bots", "My bots"], ["advanced", "Advanced"]];
 
 export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initialTab, onWelcome }: {
@@ -258,6 +259,7 @@ export function SettingsModal({ me, onClose, onSaved, onSignOut, onError, initia
           {tab === "status" && <StatusEditor me={me} onSaved={onSaved} onError={onError} />}
           {tab === "appearance" && <AppearanceTab me={me} onSaved={onSaved} onError={onError} />}
           {tab === "voice" && <VoiceSettings />}
+          {tab === "sounds" && <SoundsTab me={me} onSaved={onSaved} onError={onError} />}
           {tab === "notifications" && <NotificationsTab me={me} onSaved={onSaved} onError={onError} />}
           {tab === "links" && <LinksTab me={me} onSaved={onSaved} onError={onError} />}
           {tab === "bot" && me.is_bot && <>
@@ -408,6 +410,11 @@ function CustomCss({ s, set }: { s: Settings; set: (p: Settings) => Promise<void
         {cssDisabled() ? " Custom CSS is off for this visit (?nocss)." : " If it hides something, open the app with ?nocss at the end of the address."}</span>
     </div>
   </>;
+}
+
+function SoundsTab(props: SettingsProps) {
+  const { s, set } = useSettings(props);
+  return <SoundSettings me={props.me} s={s} set={set} onError={props.onError} />;
 }
 
 function NotificationsTab(props: SettingsProps) {
