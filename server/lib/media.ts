@@ -84,3 +84,44 @@ export function deviceProblem(e: unknown, what: "microphone" | "camera"): string
 }
 
 export const canUseCamera = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+
+/**
+ * Set our description and wait just long enough for usable network routes (ICE candidates) to be in
+ * it: we send whole descriptions (no trickle - Jace Launcher needs them whole), and waiting for the
+ * browser to finish gathering took up to 5 s a side on many computers (VPN, Docker or IPv6
+ * interfaces never "complete") - ~10 s of silence before a call's audio started. Now: done when
+ * gathering completes, or shortly after the first internet-reachable route (a relay one when a TURN
+ * relay is set up, since strict networks need it), and never longer than maxMs.
+ */
+export async function describeWhenReady(pc: RTCPeerConnection, desc: RTCSessionDescriptionInit, wantRelay: boolean, maxMs = 3000): Promise<string> {
+  await pc.setLocalDescription(desc);
+  if (pc.iceGatheringState !== "complete") {
+    await new Promise<void>((ok) => {
+      let soon: ReturnType<typeof setTimeout> | null = null;
+      const finish = () => {
+        clearTimeout(max); if (soon) clearTimeout(soon);
+        pc.removeEventListener("icecandidate", onCandidate);
+        pc.removeEventListener("icegatheringstatechange", onState);
+        ok();
+      };
+      const max = setTimeout(finish, maxMs);
+      const onState = () => { if (pc.iceGatheringState === "complete") finish(); };
+      const onCandidate = (ev: RTCPeerConnectionIceEvent) => {
+        if (!ev.candidate) { finish(); return; }                 // the end of the list
+        const type = ev.candidate.type ?? / typ (\w+)/.exec(ev.candidate.candidate)?.[1];
+        if (soon) return;
+        if (type === "relay") soon = setTimeout(finish, 150);
+        else if (type === "srflx" && !wantRelay) soon = setTimeout(finish, 400);
+      };
+      pc.addEventListener("icecandidate", onCandidate);
+      pc.addEventListener("icegatheringstatechange", onState);
+    });
+  }
+  const sdp = pc.localDescription?.sdp;
+  if (!sdp) throw new Error("Couldn't start the call");
+  return sdp;
+}
+
+/** Do these ICE servers include a TURN relay? */
+export const hasRelay = (servers: RTCIceServer[]) =>
+  servers.some((s) => (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u) => /^turns?:/.test(u)));

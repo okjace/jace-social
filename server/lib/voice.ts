@@ -5,7 +5,7 @@
 // two people renegotiate at once, the one with the smaller id gives way ("polite peer").
 // Like direct calls, each description is sent once ICE gathering is done (no trickle).
 import { api } from "./client";
-import { deviceProblem, getCamera, getMic, readStreams, tagStreams, type StreamKinds } from "./media";
+import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, readStreams, tagStreams, type StreamKinds } from "./media";
 
 export type Participant = { uuid: string; muted: boolean; deafened: boolean; streaming: boolean; person?: { name: string; avatar_url: string | null } };
 export type RoomState = {
@@ -25,15 +25,9 @@ type Peer = {
 const EMPTY: RoomState = { channelId: null, serverId: null, channelName: "", participants: [], muted: false, deafened: false,
   sharing: false, noMic: false, speaking: {}, screens: {}, connecting: false, camera: false, cameras: {}, canVideo: true };
 
-async function described(pc: RTCPeerConnection, desc: RTCSessionDescriptionInit) {
-  await pc.setLocalDescription(desc);
-  if (pc.iceGatheringState !== "complete") {
-    await new Promise<void>((ok) => {
-      const t = setTimeout(ok, 5000);
-      pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); ok(); } });
-    });
-  }
-  return pc.localDescription!.sdp;
+/** Our description, as soon as it has usable network routes (lib/media.ts describeWhenReady). */
+function described(pc: RTCPeerConnection, desc: RTCSessionDescriptionInit) {
+  return describeWhenReady(pc, desc, hasRelay(pc.getConfiguration().iceServers ?? []));
 }
 
 export class Voice {
@@ -48,6 +42,11 @@ export class Voice {
   private meter: ReturnType<typeof setInterval> | null = null;
   private audioCtx: AudioContext | null = null;
   private analysers = new Map<string, AnalyserNode>();
+  private seen = new Set<number>();
+  private lastSeen = 0;
+  private joinedAfter = 0;                        // signals up to this id were there before we joined
+  private catchTimer: ReturnType<typeof setInterval> | null = null;
+  private catching = false;
   private listeners = new Set<(s: RoomState) => void>();
 
   constructor(private onError: (m: string) => void) {}
@@ -74,10 +73,16 @@ export class Voice {
         this.set({ noMic: true });
         this.onError(`${deviceProblem(e, "microphone")} You can still listen.`);   // say why, not just a crossed-out mic
       }
+      // signals left from an earlier visit to this room: note them, never act on them
+      const old = await api<{ latest: number }>(`/voice/signal?channel_id=${encodeURIComponent(channelId)}&latest=1`).catch(() => ({ latest: 0 }));
+      this.joinedAfter = old.latest;
+      this.lastSeen = Math.max(this.lastSeen, old.latest);
       this.set({ participants: room.participants, muted: !room.can_speak, connecting: false, canVideo: room.can_stream !== false });
       // the one who joins connects to everyone already here
       for (const p of room.participants) if (p.uuid !== me) await this.call(p.uuid);
       this.beat = setInterval(() => void this.sendState({}), 20_000);
+      // signals whose live event was missed (someone shown in the room but never connected)
+      this.catchTimer = setInterval(() => void this.catchUp(), 3000);
       this.meter = setInterval(() => this.measure(), 150);
     } catch (e) {
       this.onError((e as Error).message);
@@ -89,7 +94,9 @@ export class Voice {
     const id = this.state.channelId;
     if (this.beat) clearInterval(this.beat);
     if (this.meter) clearInterval(this.meter);
-    this.beat = this.meter = null;
+    if (this.catchTimer) clearInterval(this.catchTimer);
+    this.beat = this.meter = this.catchTimer = null;
+    this.lastSeen = this.joinedAfter = 0;
     for (const uuid of [...this.peers.keys()]) this.dropPeer(uuid);
     this.mic?.getTracks().forEach((t) => t.stop());
     this.screen?.getTracks().forEach((t) => t.stop());
@@ -205,6 +212,9 @@ export class Voice {
   /** Live "voice_signal" event: an offer or answer from someone in the room. */
   async onSignal(e: { id: number; from: string; kind: string; channel_id: string }) {
     if (e.channel_id !== this.state.channelId) return;
+    if (this.seen.has(e.id) || e.id <= this.joinedAfter) return;   // handled already (live event + catch-up), or from before we joined
+    this.seen.add(e.id);
+    this.lastSeen = Math.max(this.lastSeen, e.id);
     try {
       const { signal } = await api<{ signal: { sdp: string; kind: string } }>(`/voice/signal?id=${e.id}`);
       if (signal.kind === "offer") {
@@ -244,6 +254,17 @@ export class Voice {
     } catch (err) {
       console.warn("voice signal", err);
     }
+  }
+
+  private async catchUp() {
+    const id = this.state.channelId;
+    if (!id || this.catching) return;
+    this.catching = true;
+    try {
+      const { signals } = await api<{ signals: { id: number; from: string; kind: string; channel_id: string }[] }>(
+        `/voice/signal?channel_id=${encodeURIComponent(id)}&after=${this.lastSeen}`);
+      for (const s of signals) if (this.state.channelId === id) await this.onSignal(s);
+    } catch { /* next time */ } finally { this.catching = false; }
   }
 
   // -- internals

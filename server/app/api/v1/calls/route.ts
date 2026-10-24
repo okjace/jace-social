@@ -1,6 +1,8 @@
 // POST {to, call_id, kind: offer|answer|hangup|renegotiate|reanswer, sdp?}: send call setup to a friend
 //   (renegotiate/reanswer: a new description mid-call, e.g. when screen sharing starts)
 // GET ?id=<signal id>: read a call signal sent to you (the live event only carries its id)
+// GET ?call_id=&after=<signal id>: the signals of that call sent to you after that one (newest 20) -
+//   the app checks every few seconds during a call, in case a live event was missed
 import { ApiError, areFriends, body, cleanUuid, db, handler, me, notify } from "@/lib/server";
 
 export const POST = handler(async (req) => {
@@ -33,7 +35,16 @@ export const POST = handler(async (req) => {
 
 export const GET = handler(async (req) => {
   const p = await me(req);
-  const id = Number(new URL(req.url).searchParams.get("id"));
+  const q = new URL(req.url).searchParams;
+  const callId = q.get("call_id");
+  if (callId) {
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(callId)) throw new ApiError(400, "Bad call id");
+    const { data, error } = await db().from("call_signals").select("id, call_id, sender, kind")
+      .eq("call_id", callId).eq("recipient", p.uuid).gt("id", Number(q.get("after")) || 0).order("id").limit(20);
+    if (error) throw error;
+    return { signals: (data ?? []).map((s) => ({ id: s.id, kind: s.kind, call_id: s.call_id, from: s.sender })) };
+  }
+  const id = Number(q.get("id"));
   if (!id) throw new ApiError(400, "id is required");
   const { data } = await db().from("call_signals")
     .select("id, call_id, sender, kind, sdp, created_at").eq("id", id).eq("recipient", p.uuid).maybeSingle();

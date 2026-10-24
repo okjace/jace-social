@@ -1,6 +1,8 @@
 // Connection setup inside a voice room (each pair of people has its own connection).
 // POST {channel_id, to, kind: offer|answer, sdp}: send it to someone in the same room
 // GET ?id=: read one sent to you (the live "voice_signal" event only carries its id)
+// GET ?channel_id=&after=<id>: the ones sent to you in that room after that one (in case a live event
+//   was missed - the app checks every few seconds while in a room)
 import { ApiError, body, cleanUuid, db, handler, me, notify } from "@/lib/server";
 import { cleanId } from "@/lib/chat";
 
@@ -25,7 +27,19 @@ export const POST = handler(async (req) => {
 
 export const GET = handler(async (req) => {
   const p = await me(req);
-  const id = Number(new URL(req.url).searchParams.get("id"));
+  const q = new URL(req.url).searchParams;
+  if (q.get("channel_id") && q.get("latest")) {               // ?channel_id=&latest=1: just the newest id (on joining)
+    const { data } = await db().from("voice_signals").select("id").eq("channel_id", cleanId(q.get("channel_id")))
+      .eq("recipient", p.uuid).order("id", { ascending: false }).limit(1).maybeSingle();
+    return { latest: data?.id ?? 0 };
+  }
+  if (q.get("channel_id")) {
+    const { data, error } = await db().from("voice_signals").select("id, channel_id, sender, kind")
+      .eq("channel_id", cleanId(q.get("channel_id"))).eq("recipient", p.uuid).gt("id", Number(q.get("after")) || 0).order("id").limit(30);
+    if (error) throw error;
+    return { signals: (data ?? []).map((s) => ({ id: s.id, from: s.sender, kind: s.kind, channel_id: s.channel_id })) };
+  }
+  const id = Number(q.get("id"));
   const { data } = await db().from("voice_signals").select("id, channel_id, sender, kind, sdp").eq("id", id).eq("recipient", p.uuid).maybeSingle();
   if (!data) throw new ApiError(404, "Not found");
   return { signal: data };

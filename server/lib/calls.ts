@@ -4,7 +4,7 @@
 // Like the launcher, each side sends its full description once ICE gathering is done
 // (no trickle), and audio goes straight between players or through the TURN relay.
 import { api } from "./client";
-import { deviceProblem, getCamera, getMic, markMove, readStreams, tagStreams, type StreamKinds } from "./media";
+import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, readStreams, tagStreams, type StreamKinds } from "./media";
 
 export type CallState = "idle" | "calling" | "ringing" | "in-call";
 export type CallInfo = {
@@ -42,6 +42,10 @@ export class Calls {
   private timeout: ReturnType<typeof setTimeout> | null = null;
   private ring: { stop: () => void } | null = null;
   private listeners = new Set<(i: CallInfo) => void>();
+  private seen = new Set<number>();               // signals already handled (live event and catch-up)
+  private lastSeen = 0;
+  private poll: ReturnType<typeof setInterval> | null = null;
+  private catching = false;
 
   /** onEnded(reason) is shown to the user as a toast. */
   constructor(private onEnded: (reason: string) => void, private onIncoming: (name: string) => void) {}
@@ -189,6 +193,9 @@ export class Calls {
 
   /** A live "call" event from the player's channel. */
   async onSignal(e: Signal) {
+    if (this.seen.has(e.id)) return;               // the live event and the catch-up can both bring it
+    this.seen.add(e.id);
+    if (e.call_id === this.callId || e.kind === "offer") this.lastSeen = Math.max(this.lastSeen, e.id);
     if (e.kind === "offer") {
       try {
         const { signal } = await api<{ signal: { sdp: string; sender: string; name: string } }>(`/calls?id=${e.id}`);
@@ -320,7 +327,12 @@ export class Calls {
       void el.play().catch(() => {});
     };
     pc.onconnectionstatechange = () => {
-      if (this.pc === pc && pc.connectionState === "failed") this.hangUp("Couldn't connect the call");
+      if (this.pc !== pc) return;
+      if (pc.connectionState === "failed") this.hangUp("Couldn't connect the call");
+      // dropped for a moment (Wi-Fi changed, a slow network): the caller reconnects it after 6 s
+      if (pc.connectionState === "disconnected" && this.callerSide) setTimeout(() => {
+        if (this.pc === pc && pc.connectionState === "disconnected") { pc.restartIce(); void this.renegotiate(); }
+      }, 6000);
     };
     return pc;
   }
@@ -354,28 +366,36 @@ export class Calls {
     this.audio.clear();
     this.callId = "";
     this.offerSdp = "";
+    this.lastSeen = 0;                               // (seen ids stay: an old signal must never act again)
     this.set(IDLE);
     if (reason) this.onEnded(reason);
   }
 
   private set(i: CallInfo) {
     this.info = i;
+    // while a call is on, check for its signals every few seconds too: a missed live event (a network
+    // blip, a sleeping tab) left one side in the call and the other not
+    if (i.state !== "idle" && !this.poll) this.poll = setInterval(() => void this.catchUp(), 3000);
+    if (i.state === "idle" && this.poll) { clearInterval(this.poll); this.poll = null; }
     for (const fn of this.listeners) fn(i);
+  }
+
+  /** Signals of this call that we haven't seen (their live event got lost). */
+  private async catchUp() {
+    const id = this.callId;
+    if (!id || this.catching) return;
+    this.catching = true;
+    try {
+      const { signals } = await api<{ signals: Signal[] }>(`/calls?call_id=${encodeURIComponent(id)}&after=${this.lastSeen}`);
+      for (const s of signals) if (this.callId === id) await this.onSignal({ ...s, name: this.info.peerName });
+    } catch { /* next time */ } finally { this.catching = false; }
   }
 }
 
 /** setLocalDescription, then wait (up to 5 s) for every ICE candidate to be in the description. */
-async function describe(pc: RTCPeerConnection, desc: RTCSessionDescriptionInit): Promise<string> {
-  await pc.setLocalDescription(desc);
-  if (pc.iceGatheringState !== "complete") {
-    await new Promise<void>((ok) => {
-      const t = setTimeout(ok, 5000);
-      pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); ok(); } });
-    });
-  }
-  const sdp = pc.localDescription?.sdp;
-  if (!sdp) throw new Error("Couldn't start the call");
-  return sdp;
+/** Our description, as soon as it has usable network routes (lib/media.ts describeWhenReady). */
+function describe(pc: RTCPeerConnection, desc: RTCSessionDescriptionInit): Promise<string> {
+  return describeWhenReady(pc, desc, hasRelay(pc.getConfiguration().iceServers ?? []));
 }
 
 /** A soft ringing sound: two short beeps every 2 s (incoming), or one longer tone (outgoing). */
