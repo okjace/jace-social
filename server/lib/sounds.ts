@@ -153,8 +153,10 @@ export function startSound(choice: string | null | undefined, kind: SoundKind): 
   return me;
 }
 
+/** How long a message sound file may play. */
+const MESSAGE_MAX = 10_000;
 let messageTurn = 0;
-/** A message sound, once (a file plays up to 4 s). */
+/** A message sound, once (a file plays up to 10 s). */
 export function playOnce(choice: string | null | undefined, kind: SoundKind = "message") {
   const pick = choice || DEFAULT_SOUND[kind];
   if (pick === "builtin:none") return;
@@ -168,16 +170,42 @@ export function playOnce(choice: string | null | undefined, kind: SoundKind = "m
       blocked(e);
       webAudio(builtinOf(/^https?:/.test(pick) ? DEFAULT_SOUND[kind] : pick, kind), false);
     });
-    setTimeout(() => { if (turn === messageTurn) el.pause(); }, 4000);   // (not a newer message's sound)
+    setTimeout(() => { if (turn === messageTurn) el.pause(); }, MESSAGE_MAX);   // (not a newer message's sound)
   };
   if (/^https?:\/\//.test(pick)) go(pick);
   else void builtinClip(builtinOf(pick, kind), false).then(go);
 }
 
-/** Play a sound once or twice to hear it (Settings -> Sounds). Stops after a few seconds. */
-export function previewSound(choice: string, kind: SoundKind) {
-  if (kind === "message") { playOnce(choice, kind); return { stop() {} }; }
-  const s = startSound(choice, kind);
-  setTimeout(() => s.stop(), 4000);
-  return s;
+let previewEl: HTMLAudioElement | null = null;
+/**
+ * Listen to a sound (Settings -> Sounds) until it ends: a file plays to its end (a message sound up to
+ * MESSAGE_MAX like for real), a built-in call sound rings 3 times. onEnd: it stopped (by itself or stop()).
+ */
+export function previewSound(choice: string, kind: SoundKind, onEnd?: () => void) {
+  const pick = choice || DEFAULT_SOUND[kind];
+  const el = previewEl ??= new Audio();
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let backup: { stop: () => void } | null = null;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    el.onended = null; el.pause(); backup?.stop();
+    onEnd?.();
+  };
+  const loops = kind !== "message" && !/^https?:/.test(pick);
+  const b = builtinOf(pick, kind);
+  const go = (src: string | null) => {
+    if (stopped) return;
+    if (!src) { backup = webAudio(b, loops); timer = setTimeout(stop, loops ? b.period * 3 : 2000); return; }
+    el.src = src; el.loop = loops; el.volume = 0.9; el.muted = false; el.currentTime = 0;
+    el.onended = stop;
+    void el.play().catch((e) => { if (!interrupted(e)) stop(); });
+    if (loops) timer = setTimeout(stop, b.period * 3);
+    else if (kind === "message") timer = setTimeout(stop, MESSAGE_MAX);
+  };
+  if (/^https?:\/\//.test(pick)) go(pick);
+  else void builtinClip(b, loops).then(go);
+  return { stop };
 }

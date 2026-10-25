@@ -21,13 +21,27 @@ export function SoundSettings({ me, s, set, onError }: {
   const [libKind, setLibKind] = useState<SoundKind>("ringtone");
   const [q, setQ] = useState("");
   const playing = useRef<{ stop: () => void } | null>(null);
+  const [listening, setListening] = useState<string | null>(null);   // "<kind> <choice>" playing now
   const loadMine = () => api<{ sounds: Sound[] }>("/sounds?mine=1").then((r) => setMine(r.sounds)).catch((e) => onError(e.message));
   const loadCommunity = () => api<{ sounds: Sound[] }>(`/sounds?kind=${libKind}&q=${encodeURIComponent(q.trim())}`)
     .then((r) => setCommunity(r.sounds)).catch(() => setCommunity([]));
   useEffect(() => { void loadMine(); return () => playing.current?.stop(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const t = setTimeout(() => void loadCommunity(), 250); return () => clearTimeout(t); }, [libKind, q]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const preview = (choice: string, kind: SoundKind) => { playing.current?.stop(); playing.current = previewSound(choice, kind); };
+  /** ▶ plays it to the end; ■ (while it plays) stops it. */
+  const preview = (choice: string, kind: SoundKind) => {
+    const key = `${kind} ${choice}`;
+    const again = listening === key;
+    playing.current?.stop();
+    if (again) return;
+    setListening(key);
+    const p = previewSound(choice, kind, () => { if (playing.current === p) { playing.current = null; setListening(null); } });
+    playing.current = p;
+  };
+  const listenButton = (choice: string, kind: SoundKind) => {
+    const on = listening === `${kind} ${choice}`;
+    return <button className="icon-btn" title={on ? "Stop" : "Listen"} onClick={() => preview(choice, kind)}>{on ? "■" : "▶"}</button>;
+  };
   const choose = (kind: SoundKind, choice: string) => void set({ [settingKey(kind)]: choice } as Settings);
   const current = (kind: SoundKind) => s[settingKey(kind)] || DEFAULT_SOUND[kind];
 
@@ -46,7 +60,7 @@ export function SoundSettings({ me, s, set, onError }: {
   const row = (kind: SoundKind, choice: string, label: React.ReactNode, extra?: React.ReactNode) => (
     <div key={choice} className={`sound-row${current(kind) === choice ? " on" : ""}`}>
       <label className="sound-pick"><input type="radio" name={kind} checked={current(kind) === choice} onChange={() => choose(kind, choice)} /> {label}</label>
-      {choice !== "builtin:none" && <button className="icon-btn" title="Listen" onClick={() => preview(choice, kind)}>▶</button>}
+      {choice !== "builtin:none" && listenButton(choice, kind)}
       {extra}
     </div>
   );
@@ -100,7 +114,7 @@ export function SoundSettings({ me, s, set, onError }: {
         : community.map((c) => (
           <div key={c.id} className={`sound-row${current(libKind) === c.url ? " on" : ""}`}>
             <span className="sound-pick"><b>{c.name}</b> <span className="muted small">by {c.by} · used {c.uses}×</span></span>
-            <button className="icon-btn" title="Listen" onClick={() => preview(c.url, libKind)}>▶</button>
+            {listenButton(c.url, libKind)}
             <button className="btn small primary" disabled={current(libKind) === c.url} onClick={async () => {
               try { const r = await api<{ url: string }>(`/sounds/${c.id}`, { body: { action: "use" } }); choose(libKind, r.url); void loadCommunity(); }
               catch (e) { onError((e as Error).message); }
