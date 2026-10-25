@@ -64,7 +64,7 @@ def command() -> list[str]:
     """What the desktop runs: this app with --overlay."""
     exe = os.environ.get("APPIMAGE")
     if exe:
-        return [exe, "--overlay"]
+        return ["env", "APPIMAGELAUNCHER_DISABLE=1", exe, "--overlay"]   # (see desktop.LAUNCH_ENV)
     if getattr(sys, "frozen", False):
         return [sys.executable, "--overlay"]
     return [sys.executable, "-m", "jace_social_app", "--overlay"]
@@ -152,7 +152,9 @@ def _niri_bind(mods, key):
     cmd = " ".join(f'"{a}"' for a in (x.replace("\\", "\\\\").replace('"', '\\"') for x in command()))
     changed = _write(CONFIG / "niri" / "jace-social.kdl",
                      f"// {MARK}: added by Jace Social, which changes or removes it (Settings -> Desktop app)\n"
-                     f'binds {{\n    {combo} hotkey-overlay-title="{MARK}" {{ spawn {cmd}; }}\n}}\n')
+                     f'binds {{\n    {combo} hotkey-overlay-title="{MARK}" {{ spawn {cmd}; }}\n}}\n'
+                     # the overlay floats on top of what you're doing instead of being tiled next to it
+                     f'window-rule {{\n    match title="^{MARK}"\n    open-floating true\n}}\n')
     _ensure_line(CONFIG / "niri" / "config.kdl", 'include "jace-social.kdl"')
     if changed:
         _run("niri", "msg", "action", "load-config-file")
@@ -170,7 +172,8 @@ def _hypr_bind(mods, key):
     m = " ".join(names[x] for x in ("meta", "ctrl", "alt", "shift") if x in mods)
     changed = _write(CONFIG / "hypr" / "jace-social.conf",
                      f"# {MARK}: added by Jace Social, which changes or removes it (Settings -> Desktop app)\n"
-                     f"bind = {m}, {keysym(key)}, exec, {shlex.join(command())}\n")
+                     f"bind = {m}, {keysym(key)}, exec, {shlex.join(command())}\n"
+                     f"windowrulev2 = float, title:^({MARK})\n")
     _ensure_line(CONFIG / "hypr" / "hyprland.conf", f"source = {CONFIG / 'hypr' / 'jace-social.conf'}")
     if changed:
         _run("hyprctl", "reload")
@@ -196,7 +199,8 @@ def _sway_bind(mods, key):
     combo = "+".join([names[x] for x in ("meta", "ctrl", "alt", "shift") if x in mods] + [keysym(key)])
     changed = _write(config.parent / "jace-social",
                      f"# {MARK}: added by Jace Social, which changes or removes it (Settings -> Desktop app)\n"
-                     f"bindsym {combo} exec {shlex.join(command())}\n")
+                     f"bindsym {combo} exec {shlex.join(command())}\n"
+                     f'for_window [title="^{MARK}"] floating enable\n')
     _ensure_line(config, f"include {config.parent / 'jace-social'}")
     if changed:
         _run("swaymsg", "reload")

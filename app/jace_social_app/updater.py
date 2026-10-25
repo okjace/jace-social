@@ -116,6 +116,7 @@ def clean_env() -> dict:
     internal variables (otherwise the new copy thinks it's our child process)."""
     env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI", "_MEI"))}
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    env["APPIMAGELAUNCHER_DISABLE"] = "1"          # (see desktop.LAUNCH_ENV)
     return env
 
 

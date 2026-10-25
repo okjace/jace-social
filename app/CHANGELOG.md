@@ -1,5 +1,9 @@
 # Jace Social desktop app changelog
 
+## 1.0.15
+- Fixes Jace Social not opening from the app menu after an update, on Linux with AppImageLauncher installed (seen on niri). AppImageLauncher stepped in when the app started, treated each updated Jace Social as a new AppImage, and crashed on Wayland before Jace Social even started. The menu entry, the desktop shortcut, opening at sign-in, the `jace-social` command, the overlay key and the app's own restarts now start Jace Social directly. Older installs are fixed the next time the app starts.
+- The overlay floats on top of what you're doing on niri, Hyprland and Sway, instead of being tiled next to your other windows.
+
 ## 1.0.14
 - **The overlay shortcut sets itself up on every Linux desktop.** On desktops that don't let apps set shortcuts (niri, Hyprland, Sway, COSMIC, Wayfire, labwc, and GNOME before 48), Jace Social now adds the key to the desktop's own keyboard settings for you and reloads them. Pick the keys in Settings → Desktop app like anywhere else. Changing the keys updates that entry, and turning the shortcut off (or uninstalling) removes it. Keys your desktop already uses are refused, so nothing of yours gets overwritten. GNOME 48+ and KDE keep asking you to allow it, and X11 works as before.
 

@@ -1015,6 +1015,7 @@ def main():
         pass
     if desktop.running_appimage() and desktop.running_installed_copy():
         desktop.remove_duplicate_entries()       # AppImageLauncher's "Jace Social (1)" from before 1.0.8
+        desktop.refresh_entries()                # menu entries that let AppImageLauncher step in (before 1.0.15)
 
     try:
         win = Window()

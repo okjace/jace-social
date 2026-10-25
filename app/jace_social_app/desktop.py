@@ -220,13 +220,41 @@ def install_app(target_dir: Path, options: dict, status=print) -> Path:
     return install(target_dir, status=status, **{k: bool(options.get(k)) for k, _, _ in install_options()})
 
 
+# AppImageLauncher (on many systems) steps in whenever an AppImage starts, and treats ours as new after
+# each update; its Qt 5 then crashed on Wayland-only setups (niri) before Jace Social even started, so the
+# menu did nothing. Everything that starts Jace Social tells it to stay out.
+LAUNCH_ENV = "APPIMAGELAUNCHER_DISABLE=1"
+
+
+def _bin_script(exe: Path) -> str:
+    return f'#!/bin/sh\n# the jace-social command (see desktop.py)\n{LAUNCH_ENV} exec "{exe}" "$@"\n'
+
+
+def refresh_entries():
+    """Installs from before LAUNCH_ENV: write their menu, desktop and startup entries (and the
+    jace-social command) again with it. Never raises."""
+    exe = installed_path()
+    if not exe or sys.platform in ("win32", "darwin"):
+        return
+    try:
+        for p, args in ((MENU_FILE, ""), (desktop_shortcut(), ""), (AUTOSTART_FILE, " --hidden")):
+            if p.exists() and LAUNCH_ENV not in p.read_text():
+                entry = _desktop_entry(exe, args)
+                _write(p, entry.split("Actions=")[0] if p == AUTOSTART_FILE else entry, executable=p != AUTOSTART_FILE)
+        if BIN_LINK.is_symlink():
+            BIN_LINK.unlink()
+            _write(BIN_LINK, _bin_script(exe), executable=True)
+    except OSError:
+        pass
+
+
 def _desktop_entry(exe: Path, args: str = "") -> str:
     return ("[Desktop Entry]\n"
             "Type=Application\n"
             f"Name={APP_NAME}\n"
             "GenericName=Chat\n"
             "Comment=Friends, chat, servers and voice calls, with Minecraft built in\n"
-            f"Exec=\"{exe}\"{args} %U\n"
+            f"Exec=env {LAUNCH_ENV} \"{exe}\"{args} %U\n"
             f"Icon={APP_ID}\n"
             "Terminal=false\n"
             "Categories=Network;Chat;InstantMessaging;\n"
@@ -236,7 +264,7 @@ def _desktop_entry(exe: Path, args: str = "") -> str:
             "Actions=uninstall;\n\n"
             "[Desktop Action uninstall]\n"
             f"Name=Uninstall {APP_NAME}\n"
-            f"Exec=\"{exe}\" --uninstall-gui\n")
+            f"Exec=env {LAUNCH_ENV} \"{exe}\" --uninstall-gui\n")
 
 
 def metainfo() -> str:
@@ -382,8 +410,7 @@ def install(target_dir: Path = DEFAULT_DIR, menu=True, desktop=True, startup=Tru
         done.append("startup")
     if terminal:
         status("Adding the 'jace-social' command")
-        BIN_LINK.parent.mkdir(parents=True, exist_ok=True)
-        BIN_LINK.symlink_to(exe)
+        _write(BIN_LINK, _bin_script(exe), executable=True)
         done.append("terminal")
     if appstream:
         status("Registering with software centers")
