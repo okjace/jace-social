@@ -46,12 +46,14 @@ export type Status = "online" | "idle" | "dnd" | "invisible";
 /**
  * Rich presence. type says where they are; the rest is optional detail:
  * details/state are two free text lines (e.g. "Survival world", "Building a castle"),
- * started_at shows "for 12 minutes", app is what sent it (launcher / minecraft / jace-social).
+ * started_at shows "for 12 minutes", app is what sent it (launcher / minecraft / jace-social / jace-games).
+ * reported_at: when Jace Games last reported it (lib/gamesIntegration.ts).
  */
 export type Activity = {
   type: "launcher" | "playing" | "hosting" | "app";
   instance?: string; version?: string; server?: string; world?: string; address?: string;
   loader?: string; modpack?: string; details?: string; state?: string; started_at?: string; app?: string;
+  reported_at?: string;
 };
 
 /** Where this site lives (for OAuth redirects and links). */

@@ -2,6 +2,7 @@
 // activity: {type: launcher|playing|hosting|app, instance?, version?, loader?, modpack?, server?, world?,
 //            address?, details?, state?, started_at?, app?} or null to go offline.
 import { ApiError, body, db, friendsOf, handler, isOnline, me, notify, type Activity } from "@/lib/server";
+import { freshGamesActivity } from "@/lib/gamesIntegration";
 
 const clip = (v: unknown, n = 80) => (typeof v === "string" ? v.slice(0, n) : undefined);
 
@@ -9,9 +10,10 @@ export const POST = handler(async (req) => {
   const p = await me(req);
   const b = await body<{ activity?: Activity | null; offline?: boolean; app?: boolean }>(req);
   // The Jace Social app (web/desktop) is the "weakest" presence: while the launcher or the
-  // game is reporting something richer, the app only keeps you online and never overrides it.
+  // game is reporting something richer (or Jace Games says what you're playing), the app only
+  // keeps you online and never overrides it.
   const fromApp = b.app === true || b.activity?.type === "app";
-  if (fromApp && isOnline(p) && p.activity && p.activity.type !== "app") {
+  if (fromApp && isOnline(p) && p.activity && (p.activity.type !== "app" || freshGamesActivity(p.activity))) {
     if (!b.offline) await db().from("profiles").update({ last_seen: new Date().toISOString() }).eq("uuid", p.uuid);
     return { ok: true };
   }

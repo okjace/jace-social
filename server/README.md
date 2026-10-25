@@ -28,6 +28,9 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
    - **Syncing messages with Jace** (see below): `JACE_TOKEN_KEY` (encrypts people's Jace tokens:
      `openssl rand -base64 32`) and `CRON_SECRET` (any long random text; also add it as the
      `CRON_SECRET` secret on GitHub, which runs the sync every 5 minutes).
+   - **Jace Games** (see below): `JACE_GAMES_APP_KEY` (the same value as `JACE_SOCIAL_APP_KEY` on
+     Jace Games: `openssl rand -base64 32`) and, if Jace Games moves, `JACE_GAMES_URL` (default
+     `https://jace-games.vercel.app`).
    - Deploy.
 
 ## Jace ban appeals
@@ -114,6 +117,26 @@ messages API; Jace's own site no longer shows them, so Jace Social is where they
   server at it with `JACE_URL` (never in production). `scripts/test-jace-core.mjs` tests the parts
   without a database; `scripts/test-jace-sync.mjs` runs the whole sync against a test Supabase project.
 
+## Jace Games integration
+
+Jace Games (jace-games.vercel.app) lets players invite their Jace Social friends from a game room's
+lobby. Its **server** calls `/api/v1/integrations/games/*` (`lib/gamesIntegration.ts`); browsers never do.
+
+- **App key:** `X-Jace-App-Key` must equal `JACE_GAMES_APP_KEY` (compared in constant time), or the answer
+  is 401 `invalid_app_key`. Without the variable the endpoints are off: 503 `not_configured`.
+- **Player:** `Authorization: Bearer <the player's Jace access token>`, from Sign in with Jace on Jace
+  Games. This server asks Jace's userinfo who it is (cached a minute per token) and uses the profile
+  with that `jace_sub`. 401 `invalid_token` if Jace says no, 403 `account_banned` if they're banned on
+  Jace or banned/deleted here, 502 `jace_unavailable` if Jace can't be reached. People who never used
+  Jace Social get `{linked: false, friends: []}` from `friends` and 404 `not_linked` elsewhere.
+- **Invites** are ordinary DMs from the player ("🎮 Join me in {game} on Jace Games: {url}"), sent the
+  same way as `POST messages` (`lib/dms.ts`), friends only, 10 a minute. The link must be
+  `JACE_GAMES_URL/r/<code>` (or `http://localhost:<port>/r/` outside production).
+- **Presence** is an `app` activity with `app: "jace-games"`; it doesn't replace Minecraft presence from
+  the last 2 minutes, and the Jace Social app's own heartbeat doesn't replace it while it's fresh (3 min).
+- Errors are `{error, error_description?}` with the codes above, plus `invalid_request` (400),
+  `not_friends` (403) and `rate_limited` (429).
+
 ## API (`/api/v1`, `Authorization: Bearer <token>`)
 
 | Method | Path | |
@@ -143,6 +166,9 @@ messages API; Jace's own site no longer shows them, so Jace Social is where they
 | POST | `calls` `{to, call_id, kind, sdp?}` | voice call setup (offer / answer / hangup), friends only |
 | GET | `calls?id=` | read a call signal sent to you (the live `call` event carries its id) |
 | GET | `calls/ice` | STUN/TURN servers for calls |
+| GET | `integrations/games/friends` | Jace Games (app key + Jace token, see above): `{linked, friends: [{uuid, name, handle, picture, status, activity, jace_sub, jace_username}]}` |
+| POST | `integrations/games/invite` `{to, game, url, code}` | Jace Games: invite a friend to a room (a DM), 10/min |
+| POST | `integrations/games/presence` `{activity}` | Jace Games: "Playing … on Jace Games" (80 chars) or `null` |
 
 ## Servers, bots and the rest (`004_community.sql`)
 
