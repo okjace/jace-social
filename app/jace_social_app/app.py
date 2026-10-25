@@ -629,6 +629,16 @@ class Window(QMainWindow):
         return None
 
     def _shortcut_failed(self, why: str):
+        if on_niri():
+            # niri doesn't let apps set shortcuts (no GlobalShortcuts portal): you bind a key in its
+            # config to run Jace Social with --overlay, which toggles the overlay of the open copy
+            exe = os.environ.get("APPIMAGE") or sys.argv[0]
+            why = ("niri doesn't let apps set shortcuts. Add a key to ~/.config/niri/config.kdl, inside binds { }: "
+                   f'Mod+Shift+J {{ spawn "{exe}" "--overlay"; }}')
+            self.hotkey_error = why
+            if pref("niri_told"):
+                return
+            set_pref("niri_told", True)
         self.hotkey_error = why
         if self.tray:
             self.tray.showMessage(APP_NAME, f"Overlay shortcut: {why}", self.windowIcon(), 6000)
@@ -773,6 +783,10 @@ def _stop_stuck_copy() -> bool:
     except OSError:
         pass
     return True
+
+
+def on_niri() -> bool:
+    return "niri" in os.environ.get("XDG_CURRENT_DESKTOP", "").lower() or bool(os.environ.get("NIRI_SOCKET"))
 
 
 def _qwebchannel_js() -> str:
@@ -982,7 +996,10 @@ def main():
     probe = QLocalSocket()
     probe.connectToServer(key)
     if probe.waitForConnected(300):
-        probe.write(f"open {link}".encode() if link else b"show")
+        # --overlay: a key bound in the desktop's own settings (niri) toggles the overlay; the
+        # activation token it gave us lets the overlay come to the front
+        overlay_msg = f"overlay {os.environ.get('XDG_ACTIVATION_TOKEN', '')}".strip()
+        probe.write(f"open {link}".encode() if link else overlay_msg.encode() if "--overlay" in argv else b"show")
         probe.waitForBytesWritten(300)
         # the open copy answers "ok"; one that doesn't is stuck (it hung while quitting), so stop it
         # and start fresh - before, Jace Social then couldn't be opened until a restart
@@ -1022,6 +1039,8 @@ def main():
             sock.flush()
             if msg.startswith("open "):
                 win.open_link(msg[5:].strip())
+            elif msg.startswith("overlay"):
+                win.toggle_overlay(msg[7:].strip())
             else:
                 win.bring_up()
         sock.readyRead.connect(got)
@@ -1029,7 +1048,9 @@ def main():
             got()
     server.newConnection.connect(connected)
     app.window = win
-    if "--hidden" not in argv:
+    if "--overlay" in argv:
+        win.toggle_overlay(os.environ.get("XDG_ACTIVATION_TOKEN", ""))
+    elif "--hidden" not in argv:
         win.show()
     if link:
         win.open_link(link)

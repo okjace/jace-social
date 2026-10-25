@@ -509,6 +509,7 @@ HELP = f"""{APP_NAME} {APP_VERSION}
   --uninstall          remove the app, its shortcuts and menu entries
   --uninstall --purge  also delete your sign-in and settings
   --hidden             start in the tray without opening the window
+  --overlay            open or close the overlay (bind it to a key in desktops like niri)
   --help               show this"""
 
 

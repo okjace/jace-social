@@ -1,5 +1,8 @@
 # Jace Social desktop app changelog
 
+## 1.0.13
+- **Overlay shortcut on niri** (and other desktops that don't let apps set shortcuts): bind a key in your desktop's own settings to run Jace Social with `--overlay`, which opens or closes the overlay. For niri, add this inside `binds { }` in `~/.config/niri/config.kdl`: `Mod+Shift+J { spawn "/path/to/JaceSocial.AppImage" "--overlay"; }`. Settings shows the exact line for your computer. Before, the app only said "The shortcut wasn't allowed".
+
 ## 1.0.12
 - Fixes Jace Social not opening again after you quit it (seen on Linux) until you restarted the computer. Quitting sometimes got stuck partway, and opening the app again only asked the stuck copy to show itself. Quitting now always finishes, and if a stuck copy is ever left over, opening Jace Social closes it and starts fresh.
 - Message and call sounds play reliably while the window is hidden in the tray or behind other windows. Before, the app slowed down in the background, lost its live connection now and then, and messages or calls that came in during that gap made no sound.
