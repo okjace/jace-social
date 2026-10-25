@@ -18,7 +18,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSystemTrayIcon, QVBoxLayout, QWidget)
 
-from jace_social_app import APP_ID, APP_NAME, APP_VERSION, DATA_DIR, URL_SCHEME, desktop, hotkeys, macinstall, minecraft, updater, wininstall
+from jace_social_app import APP_ID, APP_NAME, APP_VERSION, DATA_DIR, URL_SCHEME, desktop, desktopkeys, hotkeys, macinstall, minecraft, updater, wininstall
 from jace_social_app.installer import SetupWizard, confirm_uninstall, run_windows_update, update_app
 
 BASE = os.environ.get("JACE_SOCIAL_URL", "https://jace-social.vercel.app").rstrip("/")
@@ -227,7 +227,7 @@ class Bridge(QObject):
             # Wayland: the keys the desktop actually uses (you can pick others in its dialog)
             "overlayBoundAs": pretty_trigger(pref("overlay_bound_as", "")) if hotkeys.on_wayland() else None,
             # Wayland: the desktop owns the keys (its dialog picks them, its settings change them)
-            "overlayManagedByDesktop": hotkeys.on_wayland(),
+            "overlayManagedByDesktop": hotkeys.on_wayland() and not desktopkeys.kind(),
             "shortcutsUnsupported": hotkeys.unsupported_reason(),
         }))
 
@@ -242,7 +242,11 @@ class Bridge(QObject):
     @Slot(int, str)
     def setOverlayShortcut(self, rid: int, combo: str):
         err = self.window.set_overlay_shortcut(combo.strip())
-        note = "Your desktop will ask you to allow it" if combo.strip() and hotkeys.on_wayland() and not err else None
+        desk = desktopkeys.kind() if hotkeys.on_wayland() else None
+        note = None
+        if combo.strip() and hotkeys.on_wayland() and not err:
+            note = (f"Added to {desktopkeys.NICE[desk]}'s keyboard settings" if desk
+                    else "Your desktop will ask you to allow it")
         self.reply.emit(rid, json.dumps({"error": err} if err else {"ok": True, "note": note}))
 
     @Slot(int)
@@ -615,9 +619,16 @@ class Window(QMainWindow):
     # -- the overlay
     def set_overlay_shortcut(self, combo: str, save=True) -> str | None:
         """Listen for this shortcut ("" turns it off); returns why it can't."""
+        desk = desktopkeys.kind()
+        added = pref("overlay_desktop")              # a desktop's config we added the key to (desktopkeys.py)
+        if added and (not combo or added != desk):
+            desktopkeys.unbind(added)
+            set_pref("overlay_desktop", None)
         try:
             self.hotkey.set(combo)
             self.hotkey_error = None
+            if combo and desk and hotkeys.on_wayland():
+                set_pref("overlay_desktop", desk)
         except (ValueError, RuntimeError) as e:
             self.hotkey_error = str(e)
             return str(e)
@@ -629,16 +640,6 @@ class Window(QMainWindow):
         return None
 
     def _shortcut_failed(self, why: str):
-        if on_niri():
-            # niri doesn't let apps set shortcuts (no GlobalShortcuts portal): you bind a key in its
-            # config to run Jace Social with --overlay, which toggles the overlay of the open copy
-            exe = os.environ.get("APPIMAGE") or sys.argv[0]
-            why = ("niri doesn't let apps set shortcuts. Add a key to ~/.config/niri/config.kdl, inside binds { }: "
-                   f'Mod+Shift+J {{ spawn "{exe}" "--overlay"; }}')
-            self.hotkey_error = why
-            if pref("niri_told"):
-                return
-            set_pref("niri_told", True)
         self.hotkey_error = why
         if self.tray:
             self.tray.showMessage(APP_NAME, f"Overlay shortcut: {why}", self.windowIcon(), 6000)
@@ -783,10 +784,6 @@ def _stop_stuck_copy() -> bool:
     except OSError:
         pass
     return True
-
-
-def on_niri() -> bool:
-    return "niri" in os.environ.get("XDG_CURRENT_DESKTOP", "").lower() or bool(os.environ.get("NIRI_SOCKET"))
 
 
 def _qwebchannel_js() -> str:

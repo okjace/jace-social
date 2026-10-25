@@ -9,6 +9,8 @@ then one key (a letter, a digit, F1-F12, Space, Tab, `, or the like).
   Linux, Wayland: the desktop's GlobalShortcuts portal (GNOME 48+, KDE): the desktop asks once
          to allow the shortcut, then tells us when it's pressed, whatever app has focus, with a
          token that lets us bring our window to the front.
+  Linux, Wayland without the portal (niri, Hyprland, Sway, COSMIC, Wayfire, labwc, older GNOME): the key
+         goes into the desktop's own config, set to run this app with --overlay (desktopkeys.py).
   Linux, X11: XGrabKey.
 """
 from __future__ import annotations
@@ -47,8 +49,11 @@ def on_wayland() -> bool:
 
 def unsupported_reason() -> str | None:
     if on_wayland():
+        from jace_social_app import desktopkeys
+        if desktopkeys.kind():
+            return None
         if not portal_available():
-            return "Your desktop doesn't support app shortcuts on Wayland (GNOME 48+ and KDE do)"
+            return desktopkeys.manual_hint()
         return None
     if sys.platform.startswith("linux") and not os.environ.get("DISPLAY"):
         return "Shortcuts need X11 or a desktop with the GlobalShortcuts portal"
@@ -86,6 +91,11 @@ class HotKey(QObject):
         if why:
             raise RuntimeError(why)
         if on_wayland():
+            from jace_social_app import desktopkeys
+            desk = desktopkeys.kind()
+            if desk:                        # the desktop's own config runs us with --overlay
+                self.bound.emit(desktopkeys.bind(desk, mods, key))
+                return
             self._commands = []
             self._stop = _portal(mods, key, self.pressed.emit, self.failed.emit, self.bound.emit, self._commands)
         elif sys.platform.startswith("linux"):

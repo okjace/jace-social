@@ -1,5 +1,8 @@
 # Jace Social desktop app changelog
 
+## 1.0.14
+- **The overlay shortcut sets itself up on every Linux desktop.** On desktops that don't let apps set shortcuts (niri, Hyprland, Sway, COSMIC, Wayfire, labwc, and GNOME before 48), Jace Social now adds the key to the desktop's own keyboard settings for you and reloads them. Pick the keys in Settings → Desktop app like anywhere else. Changing the keys updates that entry, and turning the shortcut off (or uninstalling) removes it. Keys your desktop already uses are refused, so nothing of yours gets overwritten. GNOME 48+ and KDE keep asking you to allow it, and X11 works as before.
+
 ## 1.0.13
 - **Overlay shortcut on niri** (and other desktops that don't let apps set shortcuts): bind a key in your desktop's own settings to run Jace Social with `--overlay`, which opens or closes the overlay. For niri, add this inside `binds { }` in `~/.config/niri/config.kdl`: `Mod+Shift+J { spawn "/path/to/JaceSocial.AppImage" "--overlay"; }`. Settings shows the exact line for your computer. Before, the app only said "The shortcut wasn't allowed".
 

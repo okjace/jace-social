@@ -484,6 +484,10 @@ def delete_app(remove_data=False, after_exit=True):
             macinstall.uninstall(extra)
         RECORD.unlink(missing_ok=True)
     else:
+        from jace_social_app import desktopkeys
+        for desk in desktopkeys.HANDLERS:          # the overlay key we added to a desktop's config
+            if desk != "gnome" or desktopkeys.kind() == "gnome":
+                desktopkeys.unbind(desk)
         uninstall(delete_running=True)
     if remove_data:
         _remove_data(after_exit)
