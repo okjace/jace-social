@@ -60,7 +60,7 @@ export function unlockSounds() {
     for (const which of ["ring", "msg"] as const) {
       const el = (which === "ring" ? ringEl : msgEl) ?? new Audio();
       if (which === "ring") ringEl = el; else msgEl = el;
-      if (el.dataset.unlocked) continue;
+      if (el.dataset.unlocked || !el.paused) continue;   // (a sound playing on it: it's unlocked already)
       el.muted = true;
       el.src = SILENT;
       void el.play().then(() => { el.pause(); el.muted = false; el.dataset.unlocked = "1"; }).catch(() => { el.muted = false; });
@@ -113,8 +113,17 @@ function webAudio(b: Builtin, loop: boolean): { stop: () => void } {
   return { stop() { if (timer) clearInterval(timer); } };
 }
 
+/** The browser wouldn't play: the page hasn't been clicked since it opened (the app tells you once). */
+function blocked(e: unknown) {
+  if ((e as Error)?.name === "NotAllowedError") window.dispatchEvent(new Event("jace-sound-blocked"));
+}
+/** play() was cut off by the next sound or by stop() - not a reason to play another way. */
+const interrupted = (e: unknown) => (e as Error)?.name === "AbortError";
+
+let ringing: { stop: () => void } | null = null;
 /** Start a call sound (loops until stop). choice: "builtin:<id>", a sound file's URL, or "builtin:none". */
 export function startSound(choice: string | null | undefined, kind: SoundKind): { stop: () => void } {
+  ringing?.stop();                                   // one call sound at a time (they share a player)
   const pick = choice || DEFAULT_SOUND[kind];
   if (pick === "builtin:none") return { stop() {} };
   let stopped = false;
@@ -123,26 +132,43 @@ export function startSound(choice: string | null | undefined, kind: SoundKind): 
   const go = (src: string | null) => {
     if (stopped) return;
     if (!src) { backup = webAudio(builtinOf(pick, kind), true); return; }
-    el.src = src; el.loop = true; el.volume = 0.9;
-    void el.play().catch(() => {                   // blocked or a broken file: the built-in one, the other way
-      if (!stopped) backup = webAudio(builtinOf(/^https?:/.test(pick) ? DEFAULT_SOUND[kind] : pick, kind), true);
+    el.src = src; el.loop = true; el.volume = 0.9; el.muted = false;
+    void el.play().catch((e) => {                  // blocked or a broken file: the built-in one, the other way
+      if (stopped || interrupted(e)) return;
+      blocked(e);
+      backup = webAudio(builtinOf(/^https?:/.test(pick) ? DEFAULT_SOUND[kind] : pick, kind), true);
     });
   };
   if (/^https?:\/\//.test(pick)) go(pick);
   else void builtinClip(builtinOf(pick, kind), true).then(go);
-  return { stop() { stopped = true; el.pause(); el.loop = false; backup?.stop(); } };
+  const me = {
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      if (ringing === me) { ringing = null; el.pause(); el.loop = false; }
+      backup?.stop();
+    },
+  };
+  ringing = me;
+  return me;
 }
 
+let messageTurn = 0;
 /** A message sound, once (a file plays up to 4 s). */
 export function playOnce(choice: string | null | undefined, kind: SoundKind = "message") {
   const pick = choice || DEFAULT_SOUND[kind];
   if (pick === "builtin:none") return;
   const el = msgEl ?? new Audio();
+  const turn = ++messageTurn;
   const go = (src: string | null) => {
     if (!src) { webAudio(builtinOf(pick, kind), false); return; }
-    el.src = src; el.loop = false; el.volume = 0.9; el.currentTime = 0;
-    void el.play().catch(() => webAudio(builtinOf(/^https?:/.test(pick) ? DEFAULT_SOUND[kind] : pick, kind), false));
-    setTimeout(() => { if (el.src === src) el.pause(); }, 4000);
+    el.src = src; el.loop = false; el.volume = 0.9; el.muted = false; el.currentTime = 0;
+    void el.play().catch((e) => {
+      if (interrupted(e)) return;
+      blocked(e);
+      webAudio(builtinOf(/^https?:/.test(pick) ? DEFAULT_SOUND[kind] : pick, kind), false);
+    });
+    setTimeout(() => { if (turn === messageTurn) el.pause(); }, 4000);   // (not a newer message's sound)
   };
   if (/^https?:\/\//.test(pick)) go(pick);
   else void builtinClip(builtinOf(pick, kind), false).then(go);

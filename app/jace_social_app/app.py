@@ -699,7 +699,19 @@ class Window(QMainWindow):
 
     def quit(self):
         self.quitting = True
-        self.hotkey.stop()
+        # stop answering "already open?" right away: opening Jace Social again starts a fresh copy
+        # instead of asking this one, which is going away
+        server = getattr(QApplication.instance(), "single_instance", None)
+        if server is not None:
+            server.close()
+        _forget_pid()
+        # Qt WebEngine sometimes hangs while shutting down (seen on Linux): then the app never
+        # quit and couldn't be opened again until a restart. Give it a few seconds, then go.
+        _exit_soon(5)
+        try:
+            self.hotkey.stop()
+        except Exception:  # noqa: BLE001 - quitting anyway
+            pass
         QApplication.quit()
 
     def closeEvent(self, e):
@@ -721,6 +733,46 @@ class Window(QMainWindow):
         self.view.setPage(None)
         self.page.deleteLater()
         super().closeEvent(e)
+
+
+PID_FILE = DATA_DIR / "running.pid"
+
+
+def _exit_soon(seconds: float):
+    t = threading.Timer(seconds, lambda: os._exit(0))
+    t.daemon = True
+    t.start()
+
+
+def _forget_pid():
+    try:
+        if PID_FILE.read_text().strip() == str(os.getpid()):
+            PID_FILE.unlink()
+    except OSError:
+        pass
+
+
+def _stop_stuck_copy() -> bool:
+    """A copy that's open but doesn't answer (stuck quitting): stop it. True if there was one."""
+    try:
+        pid = int(PID_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return False                     # no file: a version from before this, which doesn't answer back
+    if pid == os.getpid():
+        return False
+    if sys.platform.startswith("linux"):
+        try:
+            cmd = Path(f"/proc/{pid}/cmdline").read_bytes().lower()
+        except OSError:
+            cmd = b""                    # already gone
+        if cmd and b"jace" not in cmd:
+            return True                  # that number belongs to something else now: just start
+    try:
+        import signal
+        os.kill(pid, signal.SIGTERM if sys.platform == "win32" else signal.SIGKILL)
+    except OSError:
+        pass
+    return True
 
 
 def _qwebchannel_js() -> str:
@@ -844,6 +896,11 @@ BLANK_PAGE_SIGN = "is not a Vulkan texture"
 
 def setup_page_drawing() -> bool:
     """Call before the first web page. Returns True when it's watching for the blank-page problem."""
+    # the page keeps running at full speed while the window is hidden in the tray or behind others:
+    # Chromium otherwise slows a hidden page's timers, its live connection dropped, and messages and
+    # calls that came in meanwhile made no sound
+    add_chromium_flags("--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+                       "--disable-backgrounding-occluded-windows")
     if running_under_wine():
         # Chromium's GPU compositor crashes on Wine without a real GPU driver (seen with
         # Soda), so draw the web page in software there; real Windows keeps the GPU
@@ -927,10 +984,21 @@ def main():
     if probe.waitForConnected(300):
         probe.write(f"open {link}".encode() if link else b"show")
         probe.waitForBytesWritten(300)
-        return
+        # the open copy answers "ok"; one that doesn't is stuck (it hung while quitting), so stop it
+        # and start fresh - before, Jace Social then couldn't be opened until a restart
+        if (probe.waitForReadyRead(2000) and bytes(probe.readAll()).startswith(b"ok")) or not _stop_stuck_copy():
+            return
+        probe.abort()
+        time.sleep(0.5)
     QLocalServer.removeServer(key)
     server = QLocalServer()
     server.listen(key)
+    app.single_instance = server
+    try:
+        PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PID_FILE.write_text(str(os.getpid()))
+    except OSError:
+        pass
     if desktop.running_appimage() and desktop.running_installed_copy():
         desktop.remove_duplicate_entries()       # AppImageLauncher's "Jace Social (1)" from before 1.0.8
 
@@ -949,7 +1017,10 @@ def main():
             msg = bytes(sock.readAll()).decode(errors="replace")
             if msg.startswith("quit"):
                 win.quit()
-            elif msg.startswith("open "):
+                return
+            sock.write(b"ok")                    # "I'm here and awake" (see the probe above)
+            sock.flush()
+            if msg.startswith("open "):
                 win.open_link(msg[5:].strip())
             else:
                 win.bring_up()
@@ -964,4 +1035,7 @@ def main():
         win.open_link(link)
     for pending in app.pending_links:            # macOS can hand links over before the window exists
         win.open_link(pending)
-    sys.exit(app.exec())
+    code = app.exec()
+    _forget_pid()
+    _exit_soon(5)                                # (in case shutting Qt down hangs after this)
+    sys.exit(code)

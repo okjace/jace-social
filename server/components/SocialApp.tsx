@@ -213,6 +213,12 @@ function Main({ me, setMe, signOut, inviteCode }: {
   // calls ring even when a live event was missed (phones in the background), with your own sounds,
   // and phones are allowed to play them (unlocked on your first tap)
   useEffect(() => { unlockSounds(); calls.watch(); return () => calls.unwatch(); }, [calls]);
+  useEffect(() => {      // browsers only play sounds once the page has been clicked since it opened: say so, once
+    let told = false;
+    const onBlocked = () => { if (!told) { told = true; err("Sounds are off until you click anywhere in Jace Social"); } };
+    window.addEventListener("jace-sound-blocked", onBlocked);
+    return () => window.removeEventListener("jace-sound-blocked", onBlocked);
+  }, [err]);
   useEffect(() => { calls.setSounds({ ringtone: settings.ringtone, calling: settings.calling_sound }); }, [calls, settings.ringtone, settings.calling_sound]);
   // Jace Launcher (voice only) sends people here to see video: #move_call=<call id>&peer=<uuid>&name=<name>
   // ...or to join a voice room here: #join_voice=<channel id>&server=<server id or empty>&name=<channel name>
@@ -247,6 +253,22 @@ function Main({ me, setMe, signOut, inviteCode }: {
     api<{ appeals: AppealRow[] }>("/appeals").then((r) => setAppealsUnread(r.appeals.filter((x) => x.unread).length)).catch(() => {});
   }, [appealsOn]);
   const loadGroups = useCallback(() => api<{ groups: Group[] }>("/groups").then((d) => setGroups(d.groups)).catch((e) => err(e.message)), [err]);
+  /** After the live connection was down: reload the lists, and if new messages came in meanwhile,
+   *  play the message sound once (their live events were lost, so nothing played). */
+  const unreadTotal = (f: FriendsData, g: Group[]) =>
+    [...f.friends, ...(f.others ?? [])].reduce((n, p) => n + (p.unread ?? 0), 0) + g.reduce((n, x) => n + (x.unread ?? 0), 0);
+  const listsRef = useRef({ friends, groups });
+  listsRef.current = { friends, groups };
+  const catchUp = useCallback(async () => {
+    try {
+      const [f, g] = await Promise.all([api<FriendsData>("/friends"), api<{ groups: Group[] }>("/groups")]);
+      const before = unreadTotal(listsRef.current.friends, listsRef.current.groups);
+      setFriends(f); setGroups(g.groups);
+      if (unreadTotal(f, g.groups) > before) messageSound({ inOpenChat: false, important: true });
+      setReload((n) => n + 1);
+      void loadServers();
+    } catch { /* still offline: the next reconnect tries again */ }
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const loadServers = useCallback(() => api<{ servers: ServerItem[] }>("/servers").then((d) => setServers(d.servers)).catch((e) => err(e.message)), [err]);
   const loadDetail = useCallback(async (id: string) => {
     try {
@@ -300,7 +322,9 @@ function Main({ me, setMe, signOut, inviteCode }: {
     };
     return connectLive(me.realtime, me.inbox, (event, p) => {
       const v = viewRef.current;
-      if (event === "message") {
+      if (event === "reconnected") {                 // the live connection dropped for a while: catch up
+        void catchUp();
+      } else if (event === "message") {
         const inOpenChat = v.kind === "dm" && v.uuid === p.from;
         if (p.from !== me.uuid) messageSound({ inOpenChat, important: true, muteKey: [p.from] });
         if (inOpenChat) setReload((n) => n + 1);

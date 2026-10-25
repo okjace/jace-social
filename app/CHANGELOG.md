@@ -1,5 +1,9 @@
 # Jace Social desktop app changelog
 
+## 1.0.12
+- Fixes Jace Social not opening again after you quit it (seen on Linux) until you restarted the computer. Quitting sometimes got stuck partway, and opening the app again only asked the stuck copy to show itself. Quitting now always finishes, and if a stuck copy is ever left over, opening Jace Social closes it and starts fresh.
+- Message and call sounds play reliably while the window is hidden in the tray or behind other windows. Before, the app slowed down in the background, lost its live connection now and then, and messages or calls that came in during that gap made no sound.
+
 ## 1.0.11
 - **Overlay shortcut on Wayland** (GNOME, KDE): your desktop now owns the keys. Settings shows the keys it uses (like Ctrl+Shift+J); **Change keys…** opens your desktop's own window to pick others, and Jace Social follows when you do. Before, choosing different keys in Jace Social didn't reach the desktop, so the shortcut seemed not to work.
 

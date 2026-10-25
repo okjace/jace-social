@@ -36,11 +36,36 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 /** Live notifications on the player's private channel (same as Jace Launcher and the mod use). */
 export function connectLive(realtime: { url: string; key: string }, inbox: string,
                             onEvent: (event: string, payload: any) => void): () => void {
-  const sb = createClient(realtime.url, realtime.key, { auth: { persistSession: false } });
-  const ch: RealtimeChannel = sb.channel(inbox)
-    .on("broadcast", { event: "*" }, (m) => onEvent(m.event, m.payload ?? {}))
-    .subscribe();
-  return () => { void sb.removeChannel(ch); };
+  // worker: the connection's heartbeat runs in a Web Worker, which isn't slowed down while the tab
+  // is hidden - otherwise the connection dropped in the background and events in the gap were lost
+  const sb = createClient(realtime.url, realtime.key, { auth: { persistSession: false }, realtime: { worker: true } });
+  let ch: RealtimeChannel | null = null;
+  let joined = false, dropped = false, closed = false;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  const join = () => {
+    ch = sb.channel(inbox)
+      .on("broadcast", { event: "*" }, (m) => onEvent(m.event, m.payload ?? {}))
+      .subscribe((status) => {
+        if (closed) return;
+        if (status === "SUBSCRIBED") {
+          // back after a drop: "reconnected", so the app can catch up on what it missed
+          if (joined && dropped) onEvent("reconnected", {});
+          joined = true; dropped = false;
+          if (retry) { clearTimeout(retry); retry = null; }
+        } else {                                        // CHANNEL_ERROR / TIMED_OUT / CLOSED
+          dropped = true;
+          retry ??= setTimeout(() => {                  // still not back after a while: join again
+            retry = null;
+            if (closed || !dropped) return;
+            const old = ch;
+            if (old) void sb.removeChannel(old);
+            join();
+          }, 5000);
+        }
+      });
+  };
+  join();
+  return () => { closed = true; if (retry) clearTimeout(retry); if (ch) void sb.removeChannel(ch); };
 }
 
 // --- shapes from the API ---------------------------------------------------------
