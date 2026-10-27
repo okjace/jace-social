@@ -167,7 +167,7 @@ final class GroupSettingsViewController: RowsViewController {
         let api = Session.shared.api
         let me = Session.shared.me?.uuid
         let owner = g.owner == me
-        let reload = { [weak self] in self?.load() }
+        let reload: () -> Void = { [weak self] in self?.load() }
         var about = [
             Row(title: "Name", value: g.name, tap: { [weak self] in
                 self?.ask("Rename the group", text: g.name ?? "", button: "Save") { name in api.renameGroup(g.id, name, self?.saved(reload) ?? { _ in }) }
@@ -250,7 +250,7 @@ final class ServerSettingsViewController: RowsViewController {
         let api = Session.shared.api
         let s = d.server
         let can = { (bit: Int) in d.owner == true || P.has(d.can, bit) }
-        let reload = { [weak self] in self?.load() }
+        let reload: () -> Void = { [weak self] in self?.load() }
         sections = []
         if can(P.MANAGE_SERVER) {
             sections.append(("Overview", [
@@ -355,7 +355,7 @@ final class ChannelsViewController: RowsViewController {
         Session.shared.api.server(id) { [weak self] r in
             guard let self = self, case .success(let d) = r else { return }
             let api = Session.shared.api
-            let reload = { [weak self] in self?.load() }
+            let reload: () -> Void = { [weak self] in self?.load() }
             let all = (d.channels ?? []).sorted { ($0.position ?? 0) < ($1.position ?? 0) }
             let rows = all.map { ch -> Row in
                 let icon = ["voice": "🔊", "announcement": "📢", "category": "📁"][ch.kind ?? "text"] ?? "#"
@@ -528,7 +528,7 @@ final class MembersViewController: RowsViewController {
         Session.shared.api.server(id) { [weak self] r in
             guard let self = self, case .success(let d) = r else { return }
             let api = Session.shared.api
-            let reload = { [weak self] in self?.load() }
+            let reload: () -> Void = { [weak self] in self?.load() }
             let roles = (d.roles ?? []).filter { $0.is_default != true }.sorted { ($0.position ?? 0) > ($1.position ?? 0) }
             let can = { (bit: Int) in d.owner == true || P.has(d.can, bit) }
             let me = Session.shared.me?.uuid
