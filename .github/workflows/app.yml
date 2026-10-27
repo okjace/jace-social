@@ -255,7 +255,10 @@ jobs:
           test -f "$HOME/Desktop/$ID.desktop"
           test -f "$HOME/.config/autostart/$ID.desktop"
           test -f "$HOME/.local/share/metainfo/$ID.metainfo.xml"
-          test -L "$HOME/.local/bin/jace-social"
+          # the jace-social command is a small script (it starts the app without AppImageLauncher)
+          test -x "$HOME/.local/bin/jace-social"
+          "$HOME/.local/bin/jace-social" --help | head -1 | grep -q "Jace Social"
+          grep -q "^Exec=env APPIMAGELAUNCHER_DISABLE=1 " "$HOME/.local/share/applications/$ID.desktop"
           desktop-file-validate "$HOME/.local/share/applications/$ID.desktop"
           "$APP" --self-test
           LATEST=$(gh release list -R "${{ github.repository }}" --exclude-drafts --exclude-pre-releases --json tagName \
