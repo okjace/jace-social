@@ -443,6 +443,32 @@ final class ChatViewController: UIViewController, UITableViewDataSource, UITable
     }
 }
 
+/// The common bits of the website's message formatting: **bold**, *italic*, __underline__,
+/// ~~strikethrough~~ and `code`.
+enum Markdown {
+    static func styled(_ text: String) -> NSMutableAttributedString {
+        let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 16), .foregroundColor: Theme.text]
+        let out = NSMutableAttributedString(string: text, attributes: base)
+        let rules: [(String, [NSAttributedString.Key: Any])] = [
+            ("`([^`\\n]+)`", [.font: UIFont(name: "Menlo", size: 14) ?? UIFont.systemFont(ofSize: 14), .backgroundColor: Theme.panel]),
+            ("\\*\\*([^*\\n]+)\\*\\*", [.font: UIFont.boldSystemFont(ofSize: 16)]),
+            ("__([^_\\n]+)__", [.underlineStyle: NSUnderlineStyle.single.rawValue]),
+            ("~~([^~\\n]+)~~", [.strikethroughStyle: NSUnderlineStyle.single.rawValue]),
+            ("(?<![*\\w])\\*([^*\\n]+)\\*(?![*\\w])", [.font: UIFont.italicSystemFont(ofSize: 16)]),
+        ]
+        for (pattern, attrs) in rules {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+            // last match first, so earlier ranges stay right while the marks come out
+            for m in re.matches(in: out.string, range: NSRange(location: 0, length: (out.string as NSString).length)).reversed() {
+                let inner = out.attributedSubstring(from: m.range(at: 1)).mutableCopy() as! NSMutableAttributedString
+                inner.addAttributes(attrs, range: NSRange(location: 0, length: inner.length))
+                out.replaceCharacters(in: m.range, with: inner)
+            }
+        }
+        return out
+    }
+}
+
 enum Links {
     static func find(_ text: String) -> [URL] {
         guard let d = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return [] }
@@ -540,12 +566,14 @@ final class MessageCell: UITableViewCell {
             replyLine.text = m.reply_to != nil ? "↪ The original message was deleted" : nil
             replyLine.isHidden = m.reply_to == nil
         }
-        var text = render(m.body ?? "")
-        if m.edited_at != nil && !text.isEmpty { text += "  (edited)" }
-        body.text = text
+        let text = render(m.body ?? "")
+        let shown = system ? NSMutableAttributedString(string: text, attributes: [.font: UIFont.italicSystemFont(ofSize: 14), .foregroundColor: Theme.muted])
+                           : Markdown.styled(text)
+        if m.edited_at != nil && !text.isEmpty {
+            shown.append(NSAttributedString(string: "  (edited)", attributes: [.font: UIFont.systemFont(ofSize: 12), .foregroundColor: Theme.muted]))
+        }
+        body.attributedText = shown
         body.isHidden = text.isEmpty
-        body.textColor = system ? Theme.muted : Theme.text
-        body.font = system ? .italicSystemFont(ofSize: 14) : .systemFont(ofSize: 16)
 
         media.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let atts = m.attachments ?? []

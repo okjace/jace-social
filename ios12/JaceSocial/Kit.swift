@@ -40,6 +40,21 @@ enum Theme {
         tab.barTintColor = bg2
         tab.isTranslucent = false
         tab.tintColor = green
+        if #available(iOS 13.0, *) {
+            let n = UINavigationBarAppearance()
+            n.configureWithOpaqueBackground()
+            n.backgroundColor = bg2
+            n.titleTextAttributes = [.foregroundColor: text]
+            n.largeTitleTextAttributes = [.foregroundColor: text]
+            nav.standardAppearance = n
+            nav.scrollEdgeAppearance = n
+            nav.compactAppearance = n
+            let t = UITabBarAppearance()
+            t.configureWithOpaqueBackground()
+            t.backgroundColor = bg2
+            tab.standardAppearance = t
+            if #available(iOS 15.0, *) { tab.scrollEdgeAppearance = t }
+        }
         UITableView.appearance().backgroundColor = bg
         UITableView.appearance().separatorColor = line
         UITableViewCell.appearance().backgroundColor = bg
@@ -216,6 +231,9 @@ final class PersonCell: UITableViewCell {
         let text = UIStackView(arrangedSubviews: [title, subtitle])
         text.axis = .vertical
         text.spacing = 2
+        text.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        badge.setContentHuggingPriority(.required, for: .horizontal)
+        badge.setContentCompressionResistancePriority(.required, for: .horizontal)
         let row = UIStackView(arrangedSubviews: [avatar, text, badge])
         row.alignment = .center
         row.spacing = 12
