@@ -25,6 +25,22 @@ takes screenshots and uploads them, which is how screens get checked.
 The one exception to "native": the block bot editor is Blockly (JavaScript, no native version),
 so it opens as a web page inside the app.
 
+## The app for older iPhones (`ios12/`)
+
+A third, smaller app for iPhones stuck on iOS 12 (iPhone 5s, 6), added 2026-10-27 at the user's
+request. SwiftUI, async/await, Combine and URLSessionWebSocketTask all need iOS 13, so it is plain
+UIKit with completion handlers, and its own WebSocket client (`WebSocket.swift`, RFC 6455 over
+URLSessionStreamTask). Its own app id (`dev.jacedeb.jacesocial.ios12`), so it installs next to the
+main app. It shares the version and changelog with the other phone apps and is released with them
+as `jace_social_mobile-<version>-ios12-unsigned.ipa` (GitHub release only, not Jace Store).
+
+What it has: signing in (Jace, Minecraft), Chats (direct messages, group chats, servers and their
+text channels), messages (text, photos, replies, reactions, editing and deleting your own, older
+messages, typing), live updates, Friends (requests, adding by @handle), You (status, custom status,
+display name, sign out). Not in it: calls and voice channels, settings for servers and groups, bots,
+notifications while the app is closed. It must be built with Xcode 16 (CI picks it); newer Xcodes
+don't build for iOS 12, and CI checks the release still allows iOS 12.
+
 ## The same structure on both
 
 - `Api`: one function per endpoint, typed models that mirror `server/lib/client.ts`

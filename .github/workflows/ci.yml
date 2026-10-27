@@ -79,7 +79,7 @@ jobs:
           }
           part desktop "$(sed -n 's/^APP_VERSION = "\(.*\)"/\1/p' app/jace_social_app/__init__.py)" app-v app/ .github/workflows/app.yml
           part mod "$(sed -n 's/^mod.version = "\(.*\)"/\1/p' mod/stonecutter.properties.toml)" mod-v mod/ .github/workflows/mod.yml
-          part phone "$(node -p "require('./mobile/package.json').version")" mobile-v ios/ android/ native-test/ mobile/package.json mobile/CHANGELOG.md .github/workflows/native.yml
+          part phone "$(node -p "require('./mobile/package.json').version")" mobile-v ios/ ios12/ android/ native-test/ mobile/package.json mobile/CHANGELOG.md .github/workflows/native.yml
           touched server/ && echo "website=true" >> "$GITHUB_OUTPUT" || echo "website=false" >> "$GITHUB_OUTPUT"
           touched site/ && echo "site=true" >> "$GITHUB_OUTPUT" || echo "site=false" >> "$GITHUB_OUTPUT"
 

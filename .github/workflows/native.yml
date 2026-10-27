@@ -4,6 +4,8 @@
 #   jace_social_mobile-<version>-android.apk       signed with the release key (secrets), installs
 #                                                  over earlier versions, the Capacitor 1.x app too
 #   jace_social_mobile-<version>-ios-unsigned.ipa  for sideloading (AltStore / Sideloadly)
+#   jace_social_mobile-<version>-ios12-unsigned.ipa  the app for older iPhones (iOS 12+, ios12/),
+#                                                  also for sideloading; not sent to Jace Store
 # The version is mobile/package.json's "version", what's new is in mobile/CHANGELOG.md.
 name: Phone apps
 
@@ -184,9 +186,93 @@ jobs:
           name: mobile-ios
           path: dist/*.ipa
 
+  ios12:
+    # the app for older iPhones (ios12/: UIKit, iOS 12+). GitHub's simulators only have new iOS
+    # versions, so it's tested there; the release check below makes sure it still allows iOS 12.
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: ios12
+    steps:
+      - uses: actions/checkout@v7
+      - name: Version
+        run: echo "JACE_MOBILE_VERSION=$(python3 -c "import json; print(json.load(open('../mobile/package.json'))['version'])")" >> "$GITHUB_ENV"
+      - name: Xcode 16 (newer Xcodes can't build for iOS 12)
+        run: |
+          X=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)
+          echo "Using $X"
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+      - name: Make the Xcode project (XcodeGen)
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build for the simulator
+        run: |
+          xcodebuild -project JaceSocial.xcodeproj -scheme JaceSocial -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || { grep -E "error:" build.log | sort -u; tail -20 build.log; exit 1; }
+          grep -E "warning:" build.log | grep -v "xcodebuild\[" | sort -u | head -30 || true
+          test -d "build/Build/Products/Debug-iphonesimulator/Jace Social.app"
+      - name: Start the fake API
+        working-directory: .
+        run: nohup python3 native-test/mock_api.py 8787 > mock.log 2>&1 &
+      - name: Start it in the simulator and screenshot it
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in d for x in d[k] if 'iPhone' in x['name']))")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP="build/Build/Products/Debug-iphonesimulator/Jace Social.app"
+          ID=dev.jacedeb.jacesocial.ios12
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" $ID
+          sleep 10
+          xcrun simctl io "$DEVICE" screenshot ../ios12-start.png
+          for shot in "chats" "dm:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:Steve" "server:22222222-2222-2222-2222-222222222222:Jace Craft"; do
+            xcrun simctl terminate "$DEVICE" $ID || true
+            if [ "$shot" = chats ]; then
+              SIMCTL_CHILD_JACE_API_BASE=http://127.0.0.1:8787 xcrun simctl launch "$DEVICE" $ID -jaceToken demo
+            else
+              SIMCTL_CHILD_JACE_API_BASE=http://127.0.0.1:8787 xcrun simctl launch "$DEVICE" $ID -jaceToken demo -jaceOpen "$shot"
+            fi
+            sleep 15
+            xcrun simctl io "$DEVICE" screenshot "../ios12-${shot%%:*}.png"
+          done
+          # still running (didn't crash)?
+          xcrun simctl spawn "$DEVICE" launchctl list | grep -q "$ID" || { echo "::error::the app isn't running any more (crashed?)"; exit 1; }
+          tail -30 ../mock.log
+          xcrun simctl spawn "$DEVICE" log show --last 3m --style compact --predicate 'process == "Jace Social"' | grep -iE "error|fail|crash|fatal" | tail -40 || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: native-ios12-screenshots
+          path: "*.png"
+      - name: Build the release (unsigned, for sideloading)
+        run: |
+          IFS=. read -r MA MI PA <<< "$JACE_MOBILE_VERSION"
+          xcodebuild -project JaceSocial.xcodeproj -scheme JaceSocial -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' -derivedDataPath release \
+            MARKETING_VERSION="$JACE_MOBILE_VERSION" CURRENT_PROJECT_VERSION=$((MA * 10000 + MI * 100 + PA)) \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > release.log 2>&1 \
+            || { grep -E "error:" release.log | sort -u; tail -20 release.log; exit 1; }
+          BIN="release/Build/Products/Release-iphoneos/Jace Social.app/Jace Social"
+          # it must still start on iOS 12
+          MINOS=$(xcrun vtool -show-build "$BIN" | awk '/minos/ {print $2; exit}')
+          echo "Minimum iOS: $MINOS"
+          case "$MINOS" in 12.*) ;; *) echo "::error::the app needs iOS $MINOS, not 12"; exit 1 ;; esac
+          mkdir -p ../dist Payload
+          cp -R "release/Build/Products/Release-iphoneos/Jace Social.app" Payload/
+          zip -qry "../dist/jace_social_mobile-$JACE_MOBILE_VERSION-ios12-unsigned.ipa" Payload
+          ls -l ../dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-ios12
+          path: dist/*.ipa
+
   release:
     if: inputs.release
-    needs: [android, android-run, ios]
+    needs: [android, android-run, ios, ios12]
     runs-on: ubuntu-latest
     permissions:
       contents: write

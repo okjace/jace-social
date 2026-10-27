@@ -1,0 +1,25 @@
+# Jace Social for older iPhones (iOS 12 and up): UIKit, no SwiftUI or async/await, which need iOS 13+.
+# A separate app from ios/ (its own app id, so both can be installed). See docs/native-apps.md.
+# `xcodegen` turns this into JaceSocial.xcodeproj (on a Mac; CI does it on GitHub's).
+name: JaceSocial
+options:
+  bundleIdPrefix: dev.jacedeb
+  deploymentTarget:
+    iOS: "12.0"
+settings:
+  base:
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "20000"
+    SWIFT_VERSION: "5.0"
+targets:
+  JaceSocial:
+    type: application
+    platform: iOS
+    sources: [JaceSocial]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jacedeb.jacesocial.ios12
+        PRODUCT_NAME: Jace Social
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: JaceSocial/Info.plist
