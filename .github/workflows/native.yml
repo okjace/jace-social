@@ -261,6 +261,14 @@ jobs:
           MINOS=$(xcrun vtool -show-build "$BIN" | awk '/minos/ {print $2; exit}')
           echo "Minimum iOS: $MINOS"
           case "$MINOS" in 12.*) ;; *) echo "::error::the app needs iOS $MINOS, not 12"; exit 1 ;; esac
+          # and so must the libraries inside it (WebRTC, for calls)
+          for fw in "release/Build/Products/Release-iphoneos/Jace Social.app/Frameworks/"*.framework; do
+            [ -d "$fw" ] || continue
+            NAME=$(basename "$fw" .framework)
+            FMIN=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$fw/Info.plist" 2>/dev/null || echo "?")
+            echo "$NAME needs iOS $FMIN"
+            case "$FMIN" in 9.*|10.*|11.*|12.*) ;; *) echo "::error::$NAME needs iOS $FMIN, so the app wouldn't start on iOS 12"; exit 1 ;; esac
+          done
           mkdir -p ../dist Payload
           cp -R "release/Build/Products/Release-iphoneos/Jace Social.app" Payload/
           zip -qry "../dist/jace_social_mobile-$JACE_MOBILE_VERSION-ios12-unsigned.ipa" Payload

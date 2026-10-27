@@ -242,3 +242,15 @@ final class PersonCell: UITableViewCell {
         badge.textColor = .white
     }
 }
+
+/// A bar button that runs a closure (target-action without a selector for each one).
+final class BarButton: UIBarButtonItem {
+    private var run: () -> Void = {}
+    convenience init(_ title: String, _ run: @escaping () -> Void) {
+        self.init(title: title, style: .plain, target: nil, action: nil)
+        self.run = run
+        target = self
+        action = #selector(tapped)
+    }
+    @objc private func tapped() { run() }
+}

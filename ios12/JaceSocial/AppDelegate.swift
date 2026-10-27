@@ -14,7 +14,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         showRoot()
         w.makeKeyAndVisible()
         NotificationCenter.default.addObserver(forName: Session.changed, object: nil, queue: .main) { [weak self] _ in self?.showRoot() }
+        // notifications while the app is closed: iOS wakes it now and then to look (Unread.swift)
+        application.setMinimumBackgroundFetchInterval(UIApplication.backgroundFetchIntervalMinimum)
+        Unread.watchLive()
         return true
+    }
+
+    func application(_ application: UIApplication, performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        Unread.check(notify: true) { new in completionHandler(new ? .newData : .noData) }
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        Unread.check(notify: false)          // (what you've seen doesn't notify later)
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
@@ -42,6 +53,8 @@ final class MainTabs: UITabBarController {
         let you = UINavigationController(rootViewController: YouViewController())
         you.tabBarItem = UITabBarItem(title: "You", image: TabIcon.you, tag: 2)
         viewControllers = [chats, friends, you]
+        _ = Phone.shared                         // calls ring from here on
+        Notify.ask()
         Session.shared.loadMe { [weak self] e in
             if let e = e, e.status != 401 { self?.alert("Couldn't load your account", e.message) }
         }

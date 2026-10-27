@@ -34,12 +34,22 @@ URLSessionStreamTask). Its own app id (`dev.jacedeb.jacesocial.ios12`), so it in
 main app. It shares the version and changelog with the other phone apps and is released with them
 as `jace_social_mobile-<version>-ios12-unsigned.ipa` (GitHub release only, not Jace Store).
 
-What it has: signing in (Jace, Minecraft), Chats (direct messages, group chats, servers and their
-text channels), messages (text, photos, replies, reactions, editing and deleting your own, older
-messages, typing), live updates, Friends (requests, adding by @handle), You (status, custom status,
-display name, sign out). Not in it: calls and voice channels, settings for servers and groups, bots,
-notifications while the app is closed. It must be built with Xcode 16 (CI picks it); newer Xcodes
-don't build for iOS 12, and CI checks the release still allows iOS 12.
+What it has: signing in (Jace, Minecraft), Chats (direct messages, group chats, servers with their
+text and voice channels; new group chats, creating and joining servers), messages (text, photos,
+replies, reactions, editing and deleting your own, older messages, typing), live updates, calls with
+friends and voice channels (WebRTC, the same signalling as the main app, ported to callbacks; camera
+too), group chat settings, server settings (name, description, icon, channels, roles and their
+permissions, members: roles / kick / ban, bans, adding your bots, deleting), bots (make, rename, picture,
+public / on, new token, code editor with Try), Friends, You (status, custom status, display name,
+picture, sign out). Not in it: sharing your screen, the block bot editor, onboarding questions.
+
+Notifications while the app is closed: a sideloaded app can't get push notifications, so iOS's
+background fetch wakes it now and then (iOS decides how often) and `Unread.swift` notifies about
+direct messages and group chats with more unread than last time. While it's still running in the
+background (just left, or in a call), live events notify straight away.
+
+It must be built with Xcode 16 (CI picks it); newer Xcodes don't build for iOS 12. CI checks that the
+release, and the libraries in it (WebRTC), still allow iOS 12.
 
 ## The same structure on both
 

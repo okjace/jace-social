@@ -56,10 +56,19 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Jace Social uses the microphone for calls and voice channels.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<!-- a call keeps going when you leave the app -->
+		<string>audio</string>
+		<!-- iOS wakes the app now and then to look for new messages (notifications while it's closed) -->
+		<string>fetch</string>
+	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Jace Social lets you pick photos to send in chat.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Jace Social lets you take a photo to send in chat.</string>
+	<string>Jace Social uses the camera for photos in chat and video in calls.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- only for the fake API in CI (native-test/mock_api.py) -->

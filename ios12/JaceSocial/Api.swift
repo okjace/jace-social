@@ -214,5 +214,131 @@ final class Api {
             }
         }
     }
+    func setAvatar(_ d: Data, _ done: @escaping (ApiError?) -> Void) { raw("/me/avatar", d, done) }
+
+    /// A picture as the whole body (avatars, icons).
+    func raw(_ path: String, _ data: Data, type: String = "image/jpeg", _ done: @escaping (ApiError?) -> Void) {
+        var req = request("POST", path)
+        req.timeoutInterval = 60
+        req.setValue(type, forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        run(req) { r in if case .failure(let e) = r { done(e) } else { done(nil) } }
+    }
+
+    // --- group chats
+    func createGroup(_ name: String, _ members: [String], _ done: @escaping Done<String>) {
+        call("POST", "/groups", body: ["name": name, "members": members]) { r in
+            done(r.map { ((self.json($0)["group"] as? [String: Any])?["id"] as? String) ?? "" })
+        }
+    }
+    func renameGroup(_ id: String, _ name: String, _ done: @escaping (ApiError?) -> Void) { send("PATCH", "/groups/\(id)", body: ["name": name], done) }
+    func addToGroup(_ id: String, _ uuid: String, _ done: @escaping (ApiError?) -> Void) { send("POST", "/groups/\(id)/members", body: ["uuid": uuid], done) }
+    /// your own uuid: leave; someone else (owner only): remove them
+    func removeFromGroup(_ id: String, _ uuid: String, _ done: @escaping (ApiError?) -> Void) { send("DELETE", "/groups/\(id)/members?uuid=\(uuid)", done) }
+
+    // --- servers
+    func createServer(_ name: String, _ done: @escaping Done<String>) {
+        call("POST", "/servers", body: ["name": name]) { r in
+            done(r.map { ((self.json($0)["server"] as? [String: Any])?["id"] as? String) ?? "" })
+        }
+    }
+    /// -> the server's id
+    func joinInvite(_ code: String, _ done: @escaping Done<String>) {
+        call("POST", "/invites/\(enc(code))", body: [:]) { r in
+            done(r.map { ((self.json($0)["server"] as? [String: Any])?["id"] as? String) ?? (self.json($0)["server_id"] as? String) ?? "" })
+        }
+    }
+    func updateServer(_ id: String, _ fields: [String: Any], _ done: @escaping (ApiError?) -> Void) { send("PATCH", "/servers/\(id)", body: fields, done) }
+    func deleteServer(_ id: String, _ done: @escaping (ApiError?) -> Void) { send("DELETE", "/servers/\(id)", done) }
+    func newInvite(_ id: String, _ done: @escaping Done<String>) {
+        call("POST", "/servers/\(id)/invite", body: [:]) { r in done(r.map { self.json($0)["invite_code"] as? String ?? "" }) }
+    }
+    /// your own uuid: leave; someone else: kick
+    func removeMember(_ id: String, _ uuid: String, _ done: @escaping (ApiError?) -> Void) { send("DELETE", "/servers/\(id)/members?uuid=\(uuid)", done) }
+    func updateMember(_ id: String, _ fields: [String: Any], _ done: @escaping (ApiError?) -> Void) { send("PATCH", "/servers/\(id)/members", body: fields, done) }
+    func bans(_ id: String, _ done: @escaping Done<[Ban]>) {
+        struct D: Codable { var bans: [Ban]? }
+        get("/servers/\(id)/bans") { (r: Result<D, ApiError>) in done(r.map { $0.bans ?? [] }) }
+    }
+    func ban(_ id: String, _ uuid: String, reason: String, _ done: @escaping (ApiError?) -> Void) {
+        send("POST", "/servers/\(id)/bans", body: ["uuid": uuid, "reason": reason, "delete_messages": false], done)
+    }
+    func unban(_ id: String, _ uuid: String, _ done: @escaping (ApiError?) -> Void) { send("DELETE", "/servers/\(id)/bans?uuid=\(uuid)", done) }
+    func createRole(_ id: String, _ name: String, _ done: @escaping (ApiError?) -> Void) { send("POST", "/servers/\(id)/roles", body: ["name": name, "color": NSNull()], done) }
+    func updateRole(_ id: String, _ role: String, _ fields: [String: Any], _ done: @escaping (ApiError?) -> Void) {
+        send("PATCH", "/servers/\(id)/roles/\(role)", body: fields, done)
+    }
+    func deleteRole(_ id: String, _ role: String, _ done: @escaping (ApiError?) -> Void) { send("DELETE", "/servers/\(id)/roles/\(role)", done) }
+    func createChannel(_ id: String, _ name: String, kind: String, _ done: @escaping (ApiError?) -> Void) {
+        send("POST", "/servers/\(id)/channels", body: ["name": name, "kind": kind], done)
+    }
+    func updateChannel(_ channel: String, _ fields: [String: Any], _ done: @escaping (ApiError?) -> Void) { send("PATCH", "/channels/\(channel)", body: fields, done) }
+    func deleteChannel(_ channel: String, _ done: @escaping (ApiError?) -> Void) { send("DELETE", "/channels/\(channel)", done) }
+    func addBot(_ id: String, _ bot: String, _ done: @escaping (ApiError?) -> Void) { send("POST", "/servers/\(id)/bots", body: ["bot": bot], done) }
+
+    // --- bots
+    func bots(_ done: @escaping Done<[Bot]>) {
+        struct D: Codable { var bots: [Bot]? }
+        get("/bots") { (r: Result<D, ApiError>) in done(r.map { $0.bots ?? [] }) }
+    }
+    /// -> its token (only shown now)
+    func createBot(_ name: String, _ done: @escaping Done<String>) {
+        call("POST", "/bots", body: ["name": name]) { r in done(r.map { self.json($0)["token"] as? String ?? "" }) }
+    }
+    func updateBot(_ id: String, _ fields: [String: Any], _ done: @escaping (ApiError?) -> Void) { send("PATCH", "/bots/\(id)", body: fields, done) }
+    func deleteBot(_ id: String, _ done: @escaping (ApiError?) -> Void) { send("DELETE", "/bots/\(id)", done) }
+    func botToken(_ id: String, _ done: @escaping Done<String>) {
+        call("POST", "/bots/\(id)/token", body: [:]) { r in done(r.map { self.json($0)["token"] as? String ?? "" }) }
+    }
+    func botCode(_ id: String, _ done: @escaping Done<String>) {
+        call("GET", "/bots/\(id)") { r in done(r.map { self.json($0)["code"] as? String ?? "" }) }
+    }
+    /// -> the slash commands it defines
+    func saveBotCode(_ id: String, _ code: String?, _ done: @escaping Done<[String]>) {
+        call("PUT", "/bots/\(id)/code", body: ["code": code as Any? ?? NSNull()]) { r in
+            done(r.map { (self.json($0)["commands"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? [] })
+        }
+    }
+    /// What the code would do for a pretend message or /command (actions, logs, error).
+    func tryBotCode(_ id: String, _ code: String, _ text: String, _ done: @escaping Done<[String: Any]>) {
+        var body: [String: Any] = ["code": code, "text": text]
+        let t = text.trimmingCharacters(in: .whitespaces)
+        if t.hasPrefix("/") {
+            let parts = t.dropFirst().split(separator: " ").map(String.init)
+            body["text"] = parts.dropFirst().joined(separator: " ")
+            body["command"] = ["name": parts.first ?? "", "args": ["text": parts.dropFirst().joined(separator: " ")]]
+        }
+        call("POST", "/bots/\(id)/code", body: body) { r in done(r.map { self.json($0)["result"] as? [String: Any] ?? [:] }) }
+    }
+
+    // --- calls and voice channels
+    /// ICE servers as the website gets them: [{urls, username?, credential?}]
+    func ice(_ done: @escaping Done<[[String: Any]]>) {
+        call("GET", "/calls/ice") { r in done(r.map { self.json($0)["ice_servers"] as? [[String: Any]] ?? [] }) }
+    }
+    func callSignal(to: String, callId: String, kind: String, sdp: String? = nil, _ done: @escaping (ApiError?) -> Void = { _ in }) {
+        var body: [String: Any] = ["to": to, "call_id": callId, "kind": kind]
+        if let s = sdp { body["sdp"] = s }
+        send("POST", "/calls", body: body, done)
+    }
+    func readCallSignal(_ id: Int, _ done: @escaping Done<Signal>) { get("/calls?id=\(id)") { (r: Result<SignalData, ApiError>) in done(r.map { $0.signal }) } }
+    func voiceJoin(_ channel: String, _ done: @escaping Done<VoiceJoin>) { post("/channels/\(channel)/voice", ["action": "join"], done) }
+    func voiceLeave(_ channel: String) { send("POST", "/channels/\(channel)/voice", body: ["action": "leave"]) }
+    func voiceState(_ channel: String, _ fields: [String: Any]) {
+        var body = fields
+        body["action"] = "state"
+        send("POST", "/channels/\(channel)/voice", body: body)
+    }
+    func voiceRoom(_ channel: String, _ done: @escaping Done<[Participant]>) {
+        get("/channels/\(channel)/voice") { (r: Result<ParticipantsData, ApiError>) in done(r.map { $0.participants ?? [] }) }
+    }
+    func voiceSignal(_ channel: String, to: String, kind: String, sdp: String, _ done: @escaping (ApiError?) -> Void = { _ in }) {
+        send("POST", "/voice/signal", body: ["channel_id": channel, "to": to, "kind": kind, "sdp": sdp], done)
+    }
+    func readVoiceSignal(_ id: Int, _ done: @escaping Done<Signal>) { get("/voice/signal?id=\(id)") { (r: Result<SignalData, ApiError>) in done(r.map { $0.signal }) } }
+
+    func json(_ data: Data) -> [String: Any] { ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:] }
+    private func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s }
+
     func presence() { send("POST", "/presence", body: ["activity": ["type": "app", "app": "jace-social-mobile"]]) }
 }

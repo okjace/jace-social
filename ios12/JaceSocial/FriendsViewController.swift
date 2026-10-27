@@ -94,6 +94,7 @@ final class FriendsViewController: UITableViewController {
             sheet.addAction(UIAlertAction(title: "Message", style: .default) { [weak self] _ in
                 self?.navigationController?.pushViewController(ChatViewController(.direct(p.uuid), title: p.shownName), animated: true)
             })
+            sheet.addAction(UIAlertAction(title: "Call", style: .default) { _ in Phone.shared.call(p.uuid, name: p.shownName) })
             sheet.addAction(UIAlertAction(title: "Remove friend", style: .destructive) { [weak self] _ in
                 self?.confirm("Remove \(p.shownName) as a friend?") { api.removeFriend(p.uuid) { e in self?.showError(e); self?.load() } }
             })
@@ -129,9 +130,9 @@ final class YouViewController: UITableViewController {
     @objc private func reload() { tableView.reloadData() }
 
     override func numberOfSections(in tableView: UITableView) -> Int { 3 }
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { [1, 2, 2][section] }
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { [1, 2, 4][section] }
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        section == 2 ? "Jace Social \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") for iOS 12. More (voice calls, servers' settings, bots) is on the website and the newer app." : nil
+        section == 2 ? "Jace Social \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") for iOS 12. Notifications while the app is closed come when iOS lets it check (every so often, not instantly)." : nil
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -159,6 +160,13 @@ final class YouViewController: UITableViewController {
         case (2, 0):
             c.textLabel?.text = "Display name"
             c.detailTextLabel?.text = me?.shownName
+            c.accessoryType = .disclosureIndicator
+        case (2, 1):
+            c.textLabel?.text = "Profile picture"
+            c.detailTextLabel?.text = "Change"
+            c.accessoryType = .disclosureIndicator
+        case (2, 2):
+            c.textLabel?.text = "Bots"
             c.accessoryType = .disclosureIndicator
         default:
             c.textLabel?.text = "Sign out"
@@ -193,6 +201,21 @@ final class YouViewController: UITableViewController {
                 self?.save(["display_name": name])
             }
         case (2, 1):
+            let p = ImagePicker.shared
+            p.done = { [weak self] image in
+                guard let d = image.fitting(512).jpegData(compressionQuality: 0.85) else { return }
+                Session.shared.api.setAvatar(d) { e in
+                    self?.showError(e)
+                    Session.shared.loadMe { _ in self?.tableView.reloadData() }
+                }
+            }
+            let picker = UIImagePickerController()
+            picker.sourceType = .photoLibrary
+            picker.delegate = p
+            present(picker, animated: true)
+        case (2, 2):
+            navigationController?.pushViewController(BotsViewController(), animated: true)
+        case (2, 3):
             confirm("Sign out of Jace Social on this phone?", button: "Sign out") { Session.shared.signOut() }
         default: break
         }
