@@ -29,6 +29,7 @@ KINDS = {   # tag prefix: (Jace Store project, changelog, title, files)
     "mobile-v": ("jace-social-mobile", "mobile/CHANGELOG.md", "Jace Social Mobile", [
         ("-android.apk", "Android", "android"),
         ("-ios-unsigned.ipa", "iPhone (sideload)", "ios"),
+        ("-ios12-unsigned.ipa", "iPhone, iOS 12 to 15 (sideload)", "ios"),
     ]),
 }
 

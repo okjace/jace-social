@@ -5,7 +5,7 @@
 #                                                  over earlier versions, the Capacitor 1.x app too
 #   jace_social_mobile-<version>-ios-unsigned.ipa  for sideloading (AltStore / Sideloadly)
 #   jace_social_mobile-<version>-ios12-unsigned.ipa  the app for older iPhones (iOS 12+, ios12/),
-#                                                  also for sideloading; not sent to Jace Store
+#                                                  also for sideloading
 # The version is mobile/package.json's "version", what's new is in mobile/CHANGELOG.md.
 name: Phone apps
 

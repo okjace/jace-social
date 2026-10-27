@@ -1,5 +1,10 @@
 # Jace Social phone app changelog
 
+## 2.0.2
+- **Jace Social for older iPhones** (iOS 12 to 15: iPhone 5s, 6 and up), a separate app: the `ios12` download. Signing in, chats, group chats and servers, messages with photos, replies, reactions and formatting, calls with friends and voice channels (with your camera), group and server settings, bots with a code editor, friends, and your status.
+- Notifications while it's closed: iOS lets it check for new messages every so often (not instantly - a sideloaded app can't get push notifications).
+- Updates: it tells you when a new version is out, and AltStore / SideStore (iOS 12.2+) update it by themselves once Jace Social's source is added (You → Updates).
+
 ## 2.0.1
 - Handles: everyone has their own unique @handle. Change yours in You → My profile (once a week).
 - Add friends by their @handle.

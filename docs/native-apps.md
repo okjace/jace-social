@@ -32,7 +32,7 @@ request. SwiftUI, async/await, Combine and URLSessionWebSocketTask all need iOS 
 UIKit with completion handlers, and its own WebSocket client (`WebSocket.swift`, RFC 6455 over
 URLSessionStreamTask). Its own app id (`dev.jacedeb.jacesocial.ios12`), so it installs next to the
 main app. It shares the version and changelog with the other phone apps and is released with them
-as `jace_social_mobile-<version>-ios12-unsigned.ipa` (GitHub release only, not Jace Store).
+as `jace_social_mobile-<version>-ios12-unsigned.ipa` (GitHub release and Jace Store, from 2.0.2).
 
 What it has: signing in (Jace, Minecraft), Chats (direct messages, group chats, servers with their
 text and voice channels; new group chats, creating and joining servers), messages (text, photos,
