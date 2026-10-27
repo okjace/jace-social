@@ -277,3 +277,15 @@ enum ChatTarget: Equatable {
     case direct(String)
     case channel(String)
 }
+
+// --- updates
+
+struct Download: Codable { var id: String; var url: String }
+
+/// GET /releases/mobile: the newest phone apps (this one is the "ios12" download).
+struct Release: Codable {
+    var version: String
+    var notes: String?
+    var page: String
+    var downloads: [Download]?
+}

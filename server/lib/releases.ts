@@ -12,6 +12,7 @@ export const PLATFORMS = [
 export const PHONE = [
   { id: "android", suffix: "-android.apk", label: "Android", note: "APK" },
   { id: "ios", suffix: "-ios-unsigned.ipa", label: "iPhone", note: "for sideloading" },
+  { id: "ios12", suffix: "-ios12-unsigned.ipa", label: "iPhone, iOS 12 to 15", note: "older iPhones" },
 ];
 
 export type Release = { version: string; page: string; notes: string; downloads: Download[] };

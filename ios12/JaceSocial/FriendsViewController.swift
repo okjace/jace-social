@@ -129,10 +129,11 @@ final class YouViewController: UITableViewController {
 
     @objc private func reload() { tableView.reloadData() }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 3 }
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { [1, 2, 4][section] }
+    override func numberOfSections(in tableView: UITableView) -> Int { 4 }
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { [1, 2, 4, 3][section] }
+    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { section == 3 ? "Updates" : nil }
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        section == 2 ? "Jace Social \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") for iOS 12. Notifications while the app is closed come when iOS lets it check (every so often, not instantly)." : nil
+        section == 3 ? "With the source added, AltStore or SideStore installs new versions by itself (iOS 12.2 and up). With Sideloadly, install the new download the same way you did this one." : section == 2 ? "Jace Social \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") for iOS 12. Notifications while the app is closed come when iOS lets it check (every so often, not instantly)." : nil
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -168,6 +169,19 @@ final class YouViewController: UITableViewController {
         case (2, 2):
             c.textLabel?.text = "Bots"
             c.accessoryType = .disclosureIndicator
+        case (3, 0):
+            c.textLabel?.text = "Check for updates"
+            c.detailTextLabel?.text = "Version \(Updates.current)"
+        case (3, 1):
+            c.textLabel?.text = "Check when the app opens"
+            c.selectionStyle = .none
+            let s = UISwitch()
+            s.isOn = Updates.auto
+            s.addTarget(self, action: #selector(autoUpdate(_:)), for: .valueChanged)
+            c.accessoryView = s
+        case (3, 2):
+            c.textLabel?.text = "Get updates in AltStore / SideStore"
+            c.textLabel?.textColor = Theme.green
         default:
             c.textLabel?.text = "Sign out"
             c.textLabel?.textColor = Theme.red
@@ -215,11 +229,24 @@ final class YouViewController: UITableViewController {
             present(picker, animated: true)
         case (2, 2):
             navigationController?.pushViewController(BotsViewController(), animated: true)
+        case (3, 0):
+            Updates.check { [weak self] r in
+                guard let self = self else { return }
+                switch r {
+                case .success(let rel?): Updates.offer(rel, from: self)
+                case .success(nil): self.alert("You're up to date", "Jace Social \(Updates.current) is the newest.")
+                case .failure: self.alert("Couldn't check for updates", "Try again later.")
+                }
+            }
+        case (3, 2):
+            Updates.openUpdater()
         case (2, 3):
             confirm("Sign out of Jace Social on this phone?", button: "Sign out") { Session.shared.signOut() }
         default: break
         }
     }
+
+    @objc private func autoUpdate(_ s: UISwitch) { Updates.auto = s.isOn }
 
     private func save(_ fields: [String: Any]) {
         Session.shared.api.updateMe(fields) { [weak self] r in

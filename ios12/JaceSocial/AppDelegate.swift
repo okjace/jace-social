@@ -61,6 +61,16 @@ final class MainTabs: UITabBarController {
         #if DEBUG
         DebugOpen.run(self)
         #endif
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            if let self = self { Updates.checkSoon(from: self) }
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        #if !DEBUG
+        Updates.checkSoon(from: self)            // (not in test builds: no popup over CI's screenshots)
+        #endif
     }
 }
 

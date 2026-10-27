@@ -7,6 +7,8 @@ export type Download = { id: string; url: string; label: string; note: string; m
 function guess(): string | null {
   const ua = navigator.userAgent;
   if (/Android/i.test(ua)) return "android";
+  const ios = /(?:iPhone|iPad|iPod).* OS (\d+)_/.exec(ua);           // (before "Mac OS X", which iPhones say too)
+  if (ios) return Number(ios[1]) < 16 ? "ios12" : "ios";
   if (/Windows/i.test(ua)) return "windows";
   if (/Mac OS X|Macintosh/i.test(ua)) return "mac-arm";
   if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return "linux";

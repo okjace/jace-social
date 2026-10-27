@@ -340,5 +340,7 @@ final class Api {
     func json(_ data: Data) -> [String: Any] { ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:] }
     private func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s }
 
+    func latestRelease(_ done: @escaping Done<Release>) { get("/releases/mobile", done) }
+
     func presence() { send("POST", "/presence", body: ["activity": ["type": "app", "app": "jace-social-mobile"]]) }
 }

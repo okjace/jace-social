@@ -48,6 +48,11 @@ background fetch wakes it now and then (iOS decides how often) and `Unread.swift
 direct messages and group chats with more unread than last time. While it's still running in the
 background (just left, or in a call), live events notify straight away.
 
+Updates: it checks /releases/mobile when it opens (once a day; You → Updates turns it off) and offers
+the "ios12" download. AltStore / SideStore install updates by themselves once the website's source
+(/altstore) is added: it lists this app as a second app, "Jace Social (iOS 12)" (iOS 12.2+, AltStore's
+own minimum). With Sideloadly, people install the new download by hand.
+
 It must be built with Xcode 16 (CI picks it); newer Xcodes don't build for iOS 12. CI checks that the
 release, and the libraries in it (WebRTC), still allow iOS 12.
 
