@@ -179,6 +179,7 @@ jobs:
             || { grep -E "error:" release.log | sort -u; tail -20 release.log; exit 1; }
           mkdir -p ../dist Payload
           cp -R "release/Build/Products/Release-iphoneos/Jace Social.app" Payload/
+          bash ../native-test/fakesign.sh "Payload/Jace Social.app" dev.jacedeb.jacesocial      # (for AppSync)
           zip -qry "../dist/jace_social_mobile-$JACE_MOBILE_VERSION-ios-unsigned.ipa" Payload
           ls -l ../dist
       - uses: actions/upload-artifact@v7
@@ -271,6 +272,7 @@ jobs:
           done
           mkdir -p ../dist Payload
           cp -R "release/Build/Products/Release-iphoneos/Jace Social.app" Payload/
+          bash ../native-test/fakesign.sh "Payload/Jace Social.app" dev.jacedeb.jacesocial.ios12      # (for AppSync)
           zip -qry "../dist/jace_social_mobile-$JACE_MOBILE_VERSION-ios12-unsigned.ipa" Payload
           ls -l ../dist
       - uses: actions/upload-artifact@v7
