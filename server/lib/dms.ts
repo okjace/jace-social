@@ -1,5 +1,6 @@
 // Sending a direct message: shared by POST /api/v1/messages and the Jace Games invites
 // (app/api/v1/integrations/games/invite), so both store, count, notify and sync the same way.
+import { guardPost } from "./automod";
 import { checkUploads } from "./storage";
 import { ApiError, areFriends, cleanUuid, db, JACE_BOT, notify, type Profile } from "./server";
 import { answerLater } from "./jaceBot";
@@ -40,6 +41,7 @@ export async function sendDm(p: Profile, b: DmInput) {
   await checkUploads(attachments.map((x) => x.url));   // real sizes on R2/B2 (lib/storage.ts)
   if (!text && !attachments.length) throw new ApiError(400, "Message is empty");
   if (text.length > 2000) throw new ApiError(400, "Messages can be up to 2000 characters");
+  await guardPost(p, "a direct message", text, attachments);     // muted? Jace's auto moderation (lib/automod.ts)
   // anyone can message the official Jace bot, and it can message anyone
   const official = p.uuid === JACE_BOT || to === JACE_BOT;
   if (to === p.uuid) throw new ApiError(400, "That's you");

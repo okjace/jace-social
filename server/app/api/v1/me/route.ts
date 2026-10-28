@@ -12,6 +12,9 @@ import { MAX_LINKS, socialOf } from "@/lib/socialLinks";
 import { isOurFile } from "@/lib/storage";
 import { pushProfileToJace } from "@/lib/jaceAdmin";
 import { isJaceStaff, welcomeOnce } from "@/lib/jaceBot";
+import { checkName, checkText } from "@/lib/automod";
+import { assertCanPost, clearExpired, ownModeration, syncFromJace } from "@/lib/moderation";
+import { after } from "next/server";
 import { ApiError, body, checkHandle, db, friendsOf, handler, HANDLE_COOLDOWN_DAYS, me, notify, publicProfile, supabaseUrl,
   type Profile } from "@/lib/server";
 
@@ -24,6 +27,7 @@ function own(p: Profile) {
     inbox: p.inbox, realtime: { url: supabaseUrl(), key: process.env.SUPABASE_PUBLISHABLE_KEY },
     settings: p.settings ?? {}, onboarded: !!p.onboarded_at || !!p.is_bot,
     handle_change_at: handleChangeAt(p),             // when you can change your handle again (null: now)
+    moderation: ownModeration(p),                    // muted on Jace Social: until when and why (lib/moderation.ts)
   };
 }
 
@@ -74,7 +78,8 @@ const SETTINGS: Record<string, (v: unknown) => unknown> = {
 };
 
 export const GET = handler(async (req) => {
-  const p = await me(req);
+  const p = await clearExpired(await me(req));       // a mute that ran out: gone
+  after(() => syncFromJace(p).catch(() => {}));      // their Jace account's ban / mute, here too (every few minutes)
   await welcomeOnce(p);                              // the Jace bot's first message to them (lib/jaceBot.ts)
   // Jace-linked people: whether their Jace messages are connected (Settings -> Accounts)
   // these may ask Jace (when not remembered): at the same time, not one after another
@@ -98,6 +103,13 @@ export const PATCH = handler(async (req) => {
   const p = await me(req);
   const b = await body<Record<string, unknown>>(req);
   const patch: Partial<Profile> = {};
+  // muted people can't change what others read (statuses and settings are fine); Jace's auto moderation
+  const writes = ["display_name", "handle", "bio", "pronouns", "custom_status", "status_emoji", "links"].filter((k) => k in b);
+  if (writes.length) assertCanPost(p);
+  if (typeof b.display_name === "string") await checkName(p, "a display name", b.display_name);
+  if (typeof b.handle === "string" && b.handle !== p.handle) await checkName(p, "an @handle", b.handle);
+  await checkText(p, "a profile", ...["bio", "pronouns", "custom_status"].map((k) => (typeof b[k] === "string" ? b[k] as string : null)),
+    ...(Array.isArray(b.links) ? b.links.map((l) => String((l as { label?: unknown })?.label ?? "")) : []));
   if ("display_name" in b) patch.display_name = text(b.display_name, 32, "Display name");
   if ("handle" in b) {
     const h = checkHandle(b.handle);

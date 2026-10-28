@@ -104,6 +104,7 @@ export type Me = Person & {
   jace_messages?: JaceMessages | null;   // Jace-linked people: syncing with their Jace messages
   jace_staff?: boolean;                  // runs the official Jace bot (signed in as it, or its owner)
   appeals?: "staff" | "reconnect" | "none";   // Jace ban appeals inbox (Jace Official's owner and admins)
+  moderation?: { muted: boolean; mute_until?: string | null; mute_reason?: string | null };   // muted on Jace Social (lib/moderation.ts)
 };
 /** GET /jace/messages: syncing direct messages and group chats with Jace's (server/lib/jaceSync.ts). */
 export type JaceMessages = {

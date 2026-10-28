@@ -101,10 +101,15 @@ final class Api {
     func server(_ id: String) async throws -> ServerDetail { try await get("/servers/\(id)") }
 
     func messages(_ t: ChatTarget, before: Int? = nil) async throws -> MessagesPage {
+        var page: MessagesPage
         switch t {
-        case .direct(let u): return try await get("/messages?with=\(u)" + (before.map { "&before=\($0)" } ?? ""))
-        case .channel(let c): return try await get("/channels/\(c)/messages" + (before.map { "?before=\($0)" } ?? ""))
+        case .direct(let u): page = try await get("/messages?with=\(u)" + (before.map { "&before=\($0)" } ?? ""))
+        case .channel(let c): page = try await get("/channels/\(c)/messages" + (before.map { "?before=\($0)" } ?? ""))
         }
+        for i in page.messages.indices where page.messages[i].body.contains("[[delete-account") {
+            page.messages[i].body = withoutBotMarks(page.messages[i].body)
+        }
+        return page
     }
 
     func send(_ t: ChatTarget, _ body: String, replyTo: Int? = nil) async throws -> Message {

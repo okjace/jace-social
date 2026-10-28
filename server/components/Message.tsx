@@ -13,7 +13,7 @@ import { playerFor } from "@/lib/videoEmbeds";
 
 export type MessageActions = {
   reply?: () => void; edit?: () => void; remove?: () => void; pin?: () => void; unpin?: () => void;
-  react: (emoji: string, on: boolean) => void; copyId?: () => void;
+  react: (emoji: string, on: boolean) => void; copyId?: () => void; report?: () => void;
 };
 
 const hasLink = (t: string) => /https?:\/\/\S+\.\S+/i.test(t);
@@ -196,6 +196,7 @@ export function MessageRow({ m, first, sender, mine, mentions, roles, reply, rep
           {(actions.pin || actions.unpin) && <button className="icon-btn" title={m.pinned_at ? "Unpin" : "Pin"} onClick={m.pinned_at ? actions.unpin : actions.pin}>📌</button>}
           <button className="icon-btn" title="Copy text" onClick={() => navigator.clipboard?.writeText(m.body)}>⧉</button>
           {actions.copyId && <button className="icon-btn" title="Copy message ID" onClick={actions.copyId}>#</button>}
+          {actions.report && <button className="icon-btn" title="Report to Jace Social's staff" onClick={actions.report}>🚩</button>}
           {actions.remove && <button className="icon-btn danger" title="Delete" onClick={actions.remove}>🗑</button>}
         </div>
       )}

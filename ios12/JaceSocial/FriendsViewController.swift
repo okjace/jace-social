@@ -95,6 +95,7 @@ final class FriendsViewController: UITableViewController {
                 self?.navigationController?.pushViewController(ChatViewController(.direct(p.uuid), title: p.shownName), animated: true)
             })
             sheet.addAction(UIAlertAction(title: "Call", style: .default) { _ in Phone.shared.call(p.uuid, name: p.shownName) })
+            sheet.addAction(UIAlertAction(title: "Report…", style: .default) { [weak self] _ in self?.report(name: p.shownName, uuid: p.uuid) })
             sheet.addAction(UIAlertAction(title: "Remove friend", style: .destructive) { [weak self] _ in
                 self?.confirm("Remove \(p.shownName) as a friend?") { api.removeFriend(p.uuid) { e in self?.showError(e); self?.load() } }
             })

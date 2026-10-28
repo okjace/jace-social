@@ -14,6 +14,7 @@ import { DM_MAX, splitBody } from "./jaceSyncCore";
 import { ApiError, db, inboxesOf, JACE_BOT, notify, type Profile } from "./server";
 import { ensureJaceBot } from "./bots";
 import { isJaceAdmin } from "./jaceAdmin";
+import { banHere, mute, unbanHere, unmute } from "./moderation";
 import { asksToDelete, asksToDeleteNow, DELETE_MARK, DELETE_NOW_MARK, findRecoveryId, recoverAccount, RECOVER_DAYS } from "./accountDeletion";
 
 export const WELCOME_NEW = "Welcome to Jace Social! Add your friends and make Jace Social feel like home!";
@@ -284,32 +285,55 @@ async function toEveryone(text: string, announcement: boolean) {
 // --- bans --------------------------------------------------------------------------------------
 
 /** Jace's moderation API, as Jace Social (an official Jace app, signed with its client id and secret). */
-async function jaceModerate(action: "ban" | "unban", jaceUserId: string, reason: string) {
-  const r = await jaceModeration(action, jaceUserId, reason);
+async function jaceModerate(action: "ban" | "unban" | "mute" | "unmute", jaceUserId: string, reason: string, minutes: number | null = null) {
+  const r = await jaceModeration(action, jaceUserId, reason, minutes);
   return r.ok ? null : r.error;
 }
 
-/** Ban someone from Jace Social (and, if asked and they have one, their Jace account). */
-export async function ban(by: Profile, uuid: string, reason: string, alsoJace: boolean) {
+async function targetOf(by: Profile, uuid: string, what: string) {
   const { data: t } = await db().from("profiles").select("*").eq("uuid", uuid).maybeSingle();
   if (!t) throw new ApiError(404, "Player not found");
   const target = t as Profile;
   const { data: bot } = await db().from("profiles").select("bot_owner").eq("uuid", JACE_BOT).single();
-  if (target.is_bot || target.uuid === bot?.bot_owner || target.uuid === by.uuid) throw new ApiError(400, "You can't ban that account");
+  if (target.is_bot || target.uuid === bot?.bot_owner || target.uuid === by.uuid || (await isJaceAdmin(target)))
+    throw new ApiError(400, `You can't ${what} that account`);
+  return target;
+}
+
+/** Ban someone from Jace Social for `minutes` (null: for good) - and, if asked and they have one, their Jace account. */
+export async function ban(by: Profile, uuid: string, reason: string, alsoJace: boolean, minutes: number | null = null) {
+  const target = await targetOf(by, uuid, "ban");
   const why = reason.trim().slice(0, 400) || null;
-  await db().from("profiles").update({ banned_at: new Date().toISOString(), ban_reason: why }).eq("uuid", uuid);
-  await db().from("sessions").delete().eq("uuid", uuid);                 // signed out everywhere
-  await db().from("voice_states").delete().eq("uuid", uuid).then(() => {}, () => {});
+  await banHere(uuid, minutes, why, "staff");
   let jace: string | null = null;
-  if (alsoJace && target.jace_sub) jace = await jaceModerate("ban", target.jace_sub, why ?? "Banned from Jace Social");
+  if (alsoJace && target.jace_sub) jace = await jaceModerate("ban", target.jace_sub, why ?? "Banned from Jace Social", minutes);
   return { banned: true, jace_banned: alsoJace && !!target.jace_sub && !jace, jace_error: jace };
 }
 
 export async function unban(uuid: string, alsoJace: boolean) {
   const { data: t } = await db().from("profiles").select("jace_sub").eq("uuid", uuid).maybeSingle();
   if (!t) throw new ApiError(404, "Player not found");
-  await db().from("profiles").update({ banned_at: null, ban_reason: null }).eq("uuid", uuid);
+  await unbanHere(uuid);
   let jace: string | null = null;
   if (alsoJace && t.jace_sub) jace = await jaceModerate("unban", t.jace_sub as string, "Unbanned on Jace Social");
   return { banned: false, jace_unbanned: alsoJace && !!t.jace_sub && !jace, jace_error: jace };
+}
+
+/** Mute someone on Jace Social (they can read, not post) for `minutes` (null: for good) - on Jace too, if asked. */
+export async function muteAccount(by: Profile, uuid: string, reason: string, alsoJace: boolean, minutes: number | null) {
+  const target = await targetOf(by, uuid, "mute");
+  const why = reason.trim().slice(0, 400);
+  await mute(uuid, minutes, why, "staff");
+  let jace: string | null = null;
+  if (alsoJace && target.jace_sub) jace = await jaceModerate("mute", target.jace_sub, why || "Muted on Jace Social", minutes);
+  return { muted: true, jace_muted: alsoJace && !!target.jace_sub && !jace, jace_error: jace };
+}
+
+export async function unmuteAccount(uuid: string, alsoJace: boolean) {
+  const { data: t } = await db().from("profiles").select("jace_sub").eq("uuid", uuid).maybeSingle();
+  if (!t) throw new ApiError(404, "Player not found");
+  await unmute(uuid);
+  let jace: string | null = null;
+  if (alsoJace && t.jace_sub) jace = await jaceModerate("unmute", t.jace_sub as string, "Unmuted on Jace Social");
+  return { muted: false, jace_unmuted: alsoJace && !!t.jace_sub && !jace, jace_error: jace };
 }

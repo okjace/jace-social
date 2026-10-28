@@ -1,5 +1,6 @@
 // POST {scope: "c"|"d", message_id, emoji}: add a reaction; DELETE (same body): remove yours.
 // scope "c" = group/server messages, "d" = direct messages.
+import { assertCanPost } from "@/lib/moderation";
 import { ApiError, body, db, handler, inboxesOf, me, notify, type Profile } from "@/lib/server";
 import { channelFor } from "@/lib/chat";
 import { has, P } from "@/lib/perms";
@@ -29,6 +30,7 @@ async function react(req: Request, on: boolean) {
   const id = Number(b.message_id);
   const emoji = String(b.emoji ?? "").trim();
   if (!id || !emoji || emoji.length > 32 || /\s/.test(emoji)) throw new ApiError(400, "Pick an emoji");
+  if (on) assertCanPost(p);                                 // muted: no reactions either (lib/moderation.ts)
   const t = await target(p, String(b.scope), id);
   if (on) {
     const { data: kinds } = await db().from("message_reactions").select("emoji").eq("scope", b.scope!).eq("message_id", id);

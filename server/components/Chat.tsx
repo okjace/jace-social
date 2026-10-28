@@ -7,6 +7,8 @@ import { has, P } from "@/lib/permbits";
 import { EmojiPicker } from "./EmojiPicker";
 import { MessageRow, nameStyle } from "./Message";
 import { Avatar, Modal } from "./ui";
+import { JACE_BOT } from "./JaceBot";
+import { ReportModal, type ReportTarget } from "./Moderation";
 
 export type ChatTarget =
   | { kind: "dm"; uuid: string; name: string }
@@ -34,6 +36,7 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
   // "Show previews?" before sending a link or a picture/video/sound
+  const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const [ask, setAsk] = useState<null | { body: string; files: Attachment[]; reply?: number; hasLink: boolean; hasMedia: boolean;
     links: boolean; media: boolean; remember: boolean }>(null);
   const prefs = useRef<Settings>({});                 // "don't ask again" this session, before settings reload
@@ -251,7 +254,8 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
   }
   const sel = Math.min(suggest, Math.max(0, suggestions.length - 1));
 
-  const canSend = has(can, P.SEND) && !(target.kind === "channel" && target.announcement && !has(can, P.MANAGE_MESSAGES));
+  const mutedUntil = me.moderation?.muted ? (me.moderation.mute_until ?? null) : undefined;
+  const canSend = mutedUntil === undefined && has(can, P.SEND) && !(target.kind === "channel" && target.announcement && !has(can, P.MANAGE_MESSAGES));
   const sendOnEnter = settings.send_on_enter !== false;
 
   return (
@@ -316,6 +320,8 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
                   try { await api("/reactions", { method: on ? "POST" : "DELETE", body: { scope, message_id: m.id, emoji } }); } catch (e) { onError((e as Error).message); void load(); }
                 },
                 copyId: settings.developer ? () => navigator.clipboard?.writeText(String(m.id)) : undefined,
+                report: !mine && m.kind !== "system" && m.sender && m.sender !== JACE_BOT
+                  ? () => setReporting({ scope: target.kind === "dm" ? "d" : "c", message_id: m.id, name: who(m.sender!)?.name ?? "someone" }) : undefined,
               }} />
           );
         })}
@@ -368,7 +374,9 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
               </label>
             )}
             <textarea ref={input} rows={1} value={text} maxLength={2000} disabled={!canSend}
-              placeholder={canSend ? placeholder : "You can't send messages here"}
+              placeholder={canSend ? placeholder : mutedUntil !== undefined
+                ? `You're muted on Jace Social ${mutedUntil ? `until ${new Date(mutedUntil).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : "for good"}${me.moderation?.mute_reason ? ` (${me.moderation.mute_reason})` : ""} - you can read, but not send`
+                : "You can't send messages here"}
               onChange={(e) => typed(e.target.value)}
               onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); void addFiles(e.clipboardData.files); } }}
               onKeyDown={(e) => {
@@ -412,6 +420,7 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
             <button className="btn small" onClick={() => setLightbox(null)}>Close</button></div>
         </Modal>
       )}
+      {reporting && <ReportModal target={reporting} onClose={() => setReporting(null)} onError={onError} />}
       {ask && (
         <Modal onClose={() => setAsk(null)}>
           <div className="modal-body">

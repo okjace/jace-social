@@ -1,5 +1,7 @@
 // GET: servers you're in (with unread counts)
 // POST {name}: create a server (you're the owner; it starts with #general)
+import { checkName } from "@/lib/automod";
+import { assertCanPost } from "@/lib/moderation";
 import { ApiError, body, db, handler, me } from "@/lib/server";
 import { MAX_SERVERS, cleanName, inviteCode, postMessage, unreadCounts, type Channel } from "@/lib/chat";
 import { createDefaultRole } from "@/lib/perms";
@@ -23,6 +25,8 @@ export const GET = handler(async (req) => {
 export const POST = handler(async (req) => {
   const p = await me(req);
   const name = cleanName((await body<{ name?: string }>(req)).name, "Server name");
+  assertCanPost(p);
+  await checkName(p, "a server's name", name);
   const { count } = await db().from("server_members").select("uuid", { count: "exact", head: true }).eq("uuid", p.uuid);
   if ((count ?? 0) >= MAX_SERVERS) throw new ApiError(400, `You can be in up to ${MAX_SERVERS} servers`);
   const { data: s, error } = await db().from("servers").insert({ name, owner: p.uuid, invite_code: inviteCode() }).select("*").single();

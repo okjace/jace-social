@@ -2,6 +2,7 @@
 // The Jace Social app: friends, direct messages, group chats, servers, voice and bots.
 // The desktop app shows this same page (with a small bridge for Microsoft sign-in,
 // notifications and updates).
+import { Reports } from "./Moderation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api, connectLive, desktop, desktopReady, getToken, inDesktop, joinAddress, setToken, statusLabel, type Channel, type Group,
@@ -40,6 +41,7 @@ type View =
   | { kind: "group"; id: string }
   | { kind: "server"; id: string; channel?: string }
   | { kind: "appeals"; user: string | null }
+  | { kind: "reports" }
   | { kind: "broadcast" }
   | { kind: "lookup" };
 type ModalState =
@@ -152,6 +154,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const [jaceTab, setJaceTab] = useState<JaceTab>("chat");
   const [jaceInbox, setJaceInbox] = useState<InboxEntry[]>([]);
   const [appealsUnread, setAppealsUnread] = useState(0);
+  const [reportsOpen, setReportsOpen] = useState(0);         // staff: open reports (components/Moderation.tsx)
+  const [reportsRefresh, setReportsRefresh] = useState(0);
   const [extraPeople, setExtraPeople] = useState<Record<string, Person>>({});
   const [appealsRefresh, setAppealsRefresh] = useState(0);
   const appealsOn = !!me.appeals && me.appeals !== "none";
@@ -252,6 +256,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
     if (!appealsOn) return;
     api<{ appeals: AppealRow[] }>("/appeals").then((r) => setAppealsUnread(r.appeals.filter((x) => x.unread).length)).catch(() => {});
   }, [appealsOn]);
+  useEffect(() => {                                     // staff: how many reports are open
+    if (!me.jace_staff) return;
+    api<{ open: number }>("/reports").then((r) => setReportsOpen(r.open)).catch(() => {});
+  }, [me.jace_staff]);
   const loadGroups = useCallback(() => api<{ groups: Group[] }>("/groups").then((d) => setGroups(d.groups)).catch((e) => err(e.message)), [err]);
   /** After the live connection was down: reload the lists, and if new messages came in meanwhile,
    *  play the message sound once (their live events were lost, so nothing played). */
@@ -371,6 +379,13 @@ function Main({ me, setMe, signOut, inviteCode }: {
         err(p.message);
       } else if (event === "broadcast_sent") {        // the Broadcast tab: done sending
         err(`Sent to ${p.sent} ${p.sent === 1 ? "person" : "people"}`);
+      } else if (event === "report") {                // someone reported a message or person: only staff get these
+        setReportsOpen((n) => n + 1);
+        setReportsRefresh((n) => n + 1);
+        notifyUser("New report", "In Reports", { important: true, onClick: () => { setView({ kind: "reports" }); setMobileMain(true); } });
+      } else if (event === "moderation") {            // you were muted or unmuted (lib/moderation.ts)
+        void api<Me>("/me").then(setMe).catch(() => {});
+        if (p.muted) err("You've been muted on Jace Social - you can read, but not send messages");
       } else if (event === "appeals_access") {
         void api<Me>("/me").then(setMe).catch(() => {});
       } else if (event === "groups") {
@@ -590,6 +605,13 @@ function Main({ me, setMe, signOut, inviteCode }: {
                 {appealsUnread > 0 && <span className="badge">{appealsUnread}</span>}
               </button>
             )}
+            {me.jace_staff && (
+              <button className={`side-item${view.kind === "reports" ? " active" : ""}${reportsOpen ? " unread" : ""}`}
+                onClick={() => go({ kind: "reports" })}>
+                <span style={{ width: 32, textAlign: "center" }}>🚩</span><span className="name">Reports<span className="sub">Messages and people reported</span></span>
+                {reportsOpen > 0 && <span className="badge">{reportsOpen}</span>}
+              </button>
+            )}
             <div className="side-label">Group chats
               <button className="icon-btn" title="New group chat" onClick={() => setModal({ kind: "group" })}>＋</button></div>
             {groups.length === 0 && <p className="muted small" style={{ margin: "0 8px" }}>None yet</p>}
@@ -673,6 +695,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
             <span className="title">📣 Broadcast</span><span className="topic">A message from the Jace bot to everyone</span></div>
           <Broadcast onError={err} />
         </>}
+        {view.kind === "reports" && me.jace_staff && <Reports onError={err} onOpenProfile={(u) => setProfile(u)} onCount={setReportsOpen}
+          refresh={reportsRefresh} back={() => setMobileMain(false)} />}
         {view.kind === "appeals" && appealsOn && <Appeals open={view.user} onOpen={(u) => setView({ kind: "appeals", user: u })}
           refresh={appealsRefresh} onUnread={setAppealsUnread} onError={err} back={() => setMobileMain(false)}
           onReconnected={() => void api<Me>("/me").then(setMe).catch(() => {})} />}

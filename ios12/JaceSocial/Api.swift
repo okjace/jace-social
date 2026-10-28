@@ -340,6 +340,14 @@ final class Api {
     func json(_ data: Data) -> [String: Any] { ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:] }
     private func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s }
 
+    /// Report a message (scope "d" | "c") or a person to Jace Social's staff.
+    func report(uuid: String? = nil, scope: String? = nil, messageId: Int? = nil, reason: String, details: String, _ done: @escaping (ApiError?) -> Void) {
+        var body: [String: Any] = ["reason": reason, "details": details]
+        if let u = uuid { body["uuid"] = u }
+        if let s = scope, let id = messageId { body["scope"] = s; body["message_id"] = id }
+        send("POST", "/reports", body: body, done)
+    }
+
     func latestRelease(_ done: @escaping Done<Release>) { get("/releases/mobile", done) }
 
     func presence() { send("POST", "/presence", body: ["activity": ["type": "app", "app": "jace-social-mobile"]]) }

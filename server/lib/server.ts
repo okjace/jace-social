@@ -36,12 +36,28 @@ export type Profile = {
   bot_enabled?: boolean; banner_url?: string | null; settings?: Record<string, unknown>; onboarded_at?: string | null;
   handle?: string | null; handle_changed_at?: string | null;
   banned_at?: string | null; ban_reason?: string | null; jace_welcome?: string | null;
+  // lib/moderation.ts (supabase/018_moderation.sql): bans and mutes that can end, and where they came from
+  ban_until?: string | null; ban_from?: string | null;
+  muted_at?: string | null; mute_until?: string | null; mute_reason?: string | null; mute_from?: string | null;
+  jace_mod_checked_at?: string | null;
   deleted_at?: string | null;                     // set aside for 10 days (lib/accountDeletion.ts)
 };
 
 /** The official Jace bot's player id (lib/bots.ts, lib/jaceBot.ts). */
 export const JACE_BOT = "00000000000000000000000000000ace";
 const BANNED = "This account is banned from Jace Social";
+
+/** Banned right now: a ban that ran out is cleared instead (lib/moderation.ts). */
+async function stillBanned(p: Pick<Profile, "uuid" | "banned_at" | "ban_until" | "ban_reason">): Promise<boolean> {
+  if (!p.banned_at) return false;
+  if (!p.ban_until || new Date(p.ban_until).getTime() > Date.now()) return true;
+  await db().from("profiles").update({ banned_at: null, ban_until: null, ban_reason: null, ban_from: null }).eq("uuid", p.uuid);
+  return false;
+}
+function bannedMessage(p: Pick<Profile, "ban_until" | "ban_reason">) {
+  const end = p.ban_until ? ` until ${new Date(p.ban_until).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" })} UTC` : "";
+  return `${BANNED}${end}${p.ban_reason ? ` (${p.ban_reason})` : ""}`;
+}
 export type Status = "online" | "idle" | "dnd" | "invisible";
 /**
  * Rich presence. type says where they are; the rest is optional detail:
@@ -95,13 +111,14 @@ export async function me(req: Request): Promise<Profile> {
     .eq("token_hash", sha256(t)).maybeSingle();
   if (!data || new Date(data.expires_at) < new Date()) throw new ApiError(401, "Session expired - sign in again");
   const p = data.profiles as unknown as Profile;
-  if (p.banned_at) throw new ApiError(403, BANNED);        // banned by the Jace bot (lib/jaceBot.ts)
+  if (await stillBanned(p)) throw new ApiError(403, bannedMessage(p));     // (lib/moderation.ts)
+  if (p.banned_at) p.banned_at = null;                                      // (ran out just now)
   return p;
 }
 
 export async function createSession(uuid: string) {
-  const { data: who } = await db().from("profiles").select("banned_at").eq("uuid", uuid).maybeSingle();
-  if (who?.banned_at) throw new ApiError(403, BANNED);
+  const { data: who } = await db().from("profiles").select("uuid, banned_at, ban_until, ban_reason").eq("uuid", uuid).maybeSingle();
+  if (who && await stillBanned(who as Profile)) throw new ApiError(403, bannedMessage(who as Profile));
   const t = token();
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
   const { error } = await db().from("sessions").insert({ token_hash: sha256(t), uuid, expires_at: expires });

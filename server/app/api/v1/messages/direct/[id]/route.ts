@@ -1,4 +1,5 @@
 // PATCH {body, link_preview?, file_previews?}: edit your own direct message (and turn its previews on or off); DELETE: delete it
+import { guardPost } from "@/lib/automod";
 import { ApiError, body, db, handler, me, notify } from "@/lib/server";
 import { previewLater } from "@/lib/embeds";
 import { editChanges } from "@/lib/uploads";
@@ -16,6 +17,7 @@ export const PATCH = handler(async (req, ctx) => {
   const b = await body<{ body?: string; link_preview?: unknown; file_previews?: unknown }>(req);
   const text = String(b.body ?? "").trim();
   if ((!text && !(m.attachments ?? []).length) || text.length > 2000) throw new ApiError(400, "Messages need 1-2000 characters");
+  if (text !== m.body) await guardPost(p, "an edited message", text);
   const { changes, lookUp } = editChanges(m, text, b);
   if (!Object.keys(changes).length) return { ok: true };
   await db().from("messages").update(changes).eq("id", m.id);

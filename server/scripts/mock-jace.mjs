@@ -15,6 +15,8 @@
 //   POST /mock/fail {times}                           the next POSTs answer 503 (to test retries)
 //   GET  /mock/state                                  everything stored, and the external ids seen
 //   POST /mock/appeal {from, body}                    an appeal message to Jace Official (lib/appeals.ts)
+//   POST /mock/moderate {user, banned?, ban_until?, muted?, mute_until?, mute_reason?}   set a ban / mute (with end times)
+//   POST /mock/automod {rules}                        Jace's auto moderation rules (GET /api/oauth/automod)
 //
 // Ban appeals: okjace owns Jace Official (only staff get /api/oauth/appeals); dave is banned and erin
 // is muted, and both have written to Jace Official. alice is not staff.
@@ -65,6 +67,14 @@ const externalIds = new Map();        // client_id:external_id -> stored id
 const codes = new Map();              // code -> {user, client_id}
 const tokens = new Map();             // token -> {user, client_id, scope}
 const moderationLog = [];             // bans and unbans by apps
+let automod = { enabled: true, blocked_terms: [], blocked_usernames: [], block_post_images: false, block_profile_images: false,
+  max_links: 0, auto_mute_after: 0, auto_mute_minutes: 1440 };
+const ended = (t) => !!t && new Date(t).getTime() <= Date.now();
+const modStatus = (u) => ({
+  user_id: u.sub, username: u.username,
+  banned: !!u.banned && !ended(u.ban_until), ban_reason: u.ban_reason ?? null, banned_at: u.banned_at ?? null, ban_until: u.ban_until ?? null,
+  muted: !!u.muted && !ended(u.mute_until), mute_reason: u.mute_reason ?? null, mute_until: u.mute_until ?? null,
+});
 
 const json = (res, status, body) => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((ok) => { let d = ""; req.on("data", (c) => (d += c)); req.on("end", () => ok(d)); });
@@ -105,6 +115,12 @@ createServer(async (req, res) => {
     const b = req.method === "POST" ? JSON.parse((await readBody(req)) || "{}") : {};
     if (path === "/mock/as") { signInAs = b.user; return json(res, 200, { ok: true }); }
     if (path === "/mock/fail") { failPosts = Number(b.times) || 0; return json(res, 200, { ok: true }); }
+    if (path === "/mock/moderate") {
+      const u = users[b.user];
+      for (const k of ["banned", "ban_until", "ban_reason", "muted", "mute_until", "mute_reason"]) if (k in b) u[k] = b[k];
+      return json(res, 200, modStatus(u));
+    }
+    if (path === "/mock/automod") { automod = { ...automod, ...b.rules }; return json(res, 200, automod); }
     if (path === "/mock/mode") {
       const u = users[b.user];
       u.banned = b.mode === "banned"; u.muted = b.mode === "muted"; u.revoked = b.mode === "revoked";
@@ -157,10 +173,17 @@ createServer(async (req, res) => {
     const u = bySub(b.user_id) ?? users[b.username];
     if (!u) return json(res, 404, { error: "not_found" });
     if (b.action === "ban" && staff.has(u.sub)) return json(res, 403, { error: "forbidden", error_description: "Staff accounts can't be banned" });
-    if (b.action === "ban") { u.banned = true; u.ban_reason = b.reason ?? null; u.banned_at = new Date().toISOString(); }
-    if (b.action === "unban") { u.banned = false; u.ban_reason = null; u.banned_at = null; }
-    if (b.action !== "status") moderationLog.push({ action: b.action, user: u.username, reason: b.reason ?? "" });
-    return json(res, 200, { user_id: u.sub, username: u.username, banned: u.banned, ban_reason: u.ban_reason ?? null, banned_at: u.banned_at ?? null, muted: u.muted });
+    const until = b.duration_minutes ? new Date(Date.now() + b.duration_minutes * 60_000).toISOString() : null;
+    if (b.action === "ban") { u.banned = true; u.ban_reason = b.reason ?? null; u.banned_at = new Date().toISOString(); u.ban_until = until; }
+    if (b.action === "unban") { u.banned = false; u.ban_reason = null; u.banned_at = null; u.ban_until = null; }
+    if (b.action === "mute") { u.muted = true; u.mute_reason = b.reason ?? null; u.mute_until = until; }
+    if (b.action === "unmute") { u.muted = false; u.mute_reason = null; u.mute_until = null; }
+    if (b.action !== "status") moderationLog.push({ action: b.action, user: u.username, reason: b.reason ?? "", minutes: b.duration_minutes ?? null });
+    return json(res, 200, modStatus(u));
+  }
+  if (path === "/api/oauth/automod" && req.method === "GET") {
+    if (!(req.headers.authorization ?? "").startsWith("Basic ")) return json(res, 401, { error: "invalid_client" });
+    return json(res, 200, automod);
   }
 
   // --- everything else needs a token

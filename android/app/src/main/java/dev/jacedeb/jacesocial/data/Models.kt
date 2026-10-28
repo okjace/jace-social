@@ -115,7 +115,16 @@ data class FriendsData(
     val friends: List<Person> = emptyList(),
     val incoming: List<Person> = emptyList(),
     val outgoing: List<Person> = emptyList(),
+    /** the official Jace bot (always there, first in Direct messages) */
+    val jace: Person? = null,
+    /** people you chat with who aren't friends (they let anyone message them) */
+    val others: List<Person> = emptyList(),
 )
+
+/** The Jace bot's "delete my account" answers carry a marker the website turns into a button
+ *  (server/lib/deleteMark.ts); the apps show the words without it. */
+fun withoutBotMarks(text: String) =
+    text.replace("[[delete-account-now]]", "").replace("[[delete-account]]", "").trim()
 
 /** What signing in gives: the session token and where live events come from. */
 @Serializable

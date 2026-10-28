@@ -3,6 +3,7 @@
 // "you can close this tab" while the app picks the result up by polling.
 import { ApiError, createSession, db, mergeProfiles, newPlayerId, siteUrl, supabaseUrl, token, type Profile } from "@/lib/server";
 import { jaceUserFromCode, type JaceUser } from "@/lib/jace";
+import { syncFromJace } from "@/lib/moderation";
 import { saveConnection } from "@/lib/jaceSync";
 
 type Req = { state: string; purpose: "signin" | "link"; link_uuid: string | null; poll_hash: string | null; return_to: string };
@@ -50,7 +51,8 @@ async function signIn(u: JaceUser) {
     p = data as Profile;
   }
   await saveConnection(p.uuid, u);                   // keep the token for syncing Jace messages
-  const session = await createSession(p.uuid);
+  await syncFromJace(p, true);                       // banned or muted on Jace: here too (lib/moderation.ts)
+  const session = await createSession(p.uuid);       // (refuses banned accounts)
   return { ...session, uuid: p.uuid, realtime_url: supabaseUrl() ?? "", realtime_key: process.env.SUPABASE_PUBLISHABLE_KEY ?? "" };
 }
 

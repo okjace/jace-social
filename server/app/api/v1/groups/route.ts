@@ -1,5 +1,7 @@
 // GET: your group chats (members, unread count, last message time)
 // POST {name?, members: [uuid]}: start a group chat with friends (up to 10 people including you)
+import { checkName } from "@/lib/automod";
+import { assertCanPost } from "@/lib/moderation";
 import { ApiError, areFriends, body, cleanUuid, db, handler, me } from "@/lib/server";
 import { MAX_GROUP, cleanName, notifyChanged, postMessage, profilesById, unreadCounts, type Channel } from "@/lib/chat";
 
@@ -37,6 +39,8 @@ export const POST = handler(async (req) => {
   if (others.length + 1 > MAX_GROUP) throw new ApiError(400, `Group chats can have up to ${MAX_GROUP} people`);
   for (const u of others) if (!(await areFriends(p.uuid, u))) throw new ApiError(403, "You can only add friends to a group chat");
   const people = await profilesById(others);
+  assertCanPost(p);
+  if (b.name?.trim()) await checkName(p, "a group chat's name", b.name);
   const name = b.name?.trim() ? cleanName(b.name, "Group name")
     : [p.display_name || p.name, ...others.map((u) => people[u]?.name ?? "?")].join(", ").slice(0, 48);
   const { data: ch, error } = await db().from("channels").insert({ name, owner: p.uuid }).select("*").single();

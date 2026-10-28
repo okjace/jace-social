@@ -124,6 +124,18 @@ fun ChatsScreen(store: Store, open: (ChatTarget, String) -> Unit) {
                     }
                 }
                 item { SectionTitle("Direct messages") }
+                f.jace?.let { j ->           // the official Jace bot: help, and a person when you ask for one
+                    item(key = "jace-bot") {
+                        Box(Modifier.fillMaxWidth().combinedClickable(onLongClick = {}) { open(ChatTarget.Direct(j.uuid), "Jace") }) {
+                            PersonRow(j, if (j.unread > 0) "New message" else "Ask me anything about Jace Social")
+                        }
+                    }
+                }
+                items(f.others, key = { "other-" + it.uuid }) { p ->
+                    Box(Modifier.fillMaxWidth().combinedClickable(onLongClick = {}) { open(ChatTarget.Direct(p.uuid), p.shownName) }) {
+                        PersonRow(p, "Not a friend")
+                    }
+                }
                 val sorted = f.friends.sortedWith(compareByDescending<Person> { it.unread }
                     .thenByDescending { it.online }.thenBy { it.shownName.lowercase() })
                 items(sorted, key = { it.uuid }) { p ->

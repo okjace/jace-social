@@ -79,9 +79,12 @@ class Api(private val token: () -> String?) {
     suspend fun servers(): ServersData = get("/servers")
     suspend fun server(id: String): ServerDetail = get("/servers/$id")
 
-    suspend fun messages(t: ChatTarget, before: Long? = null): MessagesPage = when (t) {
-        is ChatTarget.Direct -> get("/messages?with=${t.uuid}" + (before?.let { "&before=$it" } ?: ""))
-        is ChatTarget.Channel -> get("/channels/${t.id}/messages" + (before?.let { "?before=$it" } ?: ""))
+    suspend fun messages(t: ChatTarget, before: Long? = null): MessagesPage {
+        val page: MessagesPage = when (t) {
+            is ChatTarget.Direct -> get("/messages?with=${t.uuid}" + (before?.let { "&before=$it" } ?: ""))
+            is ChatTarget.Channel -> get("/channels/${t.id}/messages" + (before?.let { "?before=$it" } ?: ""))
+        }
+        return page.copy(messages = page.messages.map { if (it.body.contains("[[delete-account")) it.copy(body = withoutBotMarks(it.body)) else it })
     }
 
     suspend fun send(t: ChatTarget, body: String, replyTo: Long? = null): Message {

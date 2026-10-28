@@ -119,6 +119,17 @@ struct FriendsData: Codable {
     var friends: [Person] = []
     var incoming: [Person] = []
     var outgoing: [Person] = []
+    /// the official Jace bot (always there, first in Direct messages)
+    var jace: Person?
+    /// people you chat with who aren't friends (they let anyone message them)
+    var others: [Person]?
+}
+
+/// The Jace bot's "delete my account" answers carry a marker the website turns into a button
+/// (server/lib/deleteMark.ts); the apps show the words without it.
+func withoutBotMarks(_ text: String) -> String {
+    text.replacingOccurrences(of: "[[delete-account-now]]", with: "").replacingOccurrences(of: "[[delete-account]]", with: "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 /// What signing in gives: the session token and where live events come from.

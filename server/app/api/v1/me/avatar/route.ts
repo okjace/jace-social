@@ -1,5 +1,7 @@
 // POST (body = the image, Content-Type image/png|jpeg|gif|webp - animated too -, up to 4 MB): new profile picture
 // DELETE: back to your Minecraft head (or initials)
+import { checkPicture } from "@/lib/automod";
+import { assertCanPost } from "@/lib/moderation";
 import { db, friendsOf, handler, me, notify } from "@/lib/server";
 import { uploadImage } from "@/lib/images";
 import { pushProfileToJace } from "@/lib/jaceAdmin";
@@ -11,6 +13,8 @@ async function changed(uuid: string) {
 
 export const POST = handler(async (req) => {
   const p = await me(req);
+  assertCanPost(p);
+  await checkPicture(p, "a profile picture", "profile");               // Jace's auto moderation (lib/automod.ts)
   const url = await uploadImage(req, p.uuid);
   await db().from("profiles").update({ avatar_url: url }).eq("uuid", p.uuid);
   await changed(p.uuid);

@@ -90,7 +90,8 @@ final class ChatsViewController: UITableViewController {
             switch r {
             case .success(let f):
                 let all = (f.friends ?? []) + (f.others ?? [])
-                self?.people = all.sorted { ($0.unread ?? 0, $0.online == true ? 1 : 0) > ($1.unread ?? 0, $1.online == true ? 1 : 0) }
+                let sorted = all.sorted { ($0.unread ?? 0, $0.online == true ? 1 : 0) > ($1.unread ?? 0, $1.online == true ? 1 : 0) }
+                self?.people = (f.jace.map { [$0] } ?? []) + sorted          // the official Jace bot first
             case .failure(let e): error = e
             }
             wait.leave()
@@ -144,7 +145,9 @@ final class ChatsViewController: UITableViewController {
         switch Section(rawValue: indexPath.section)! {
         case .direct:
             let p = people[indexPath.row]
-            cell.show(name: p.shownName, picture: p.avatar_url, line: p.statusText, unread: p.unread ?? 0, status: p.status ?? "offline")
+            let bot = p.uuid == Person.jaceBot
+            cell.show(name: bot ? "Jace" : p.shownName, picture: p.avatar_url, line: bot ? "Ask me anything about Jace Social" : p.statusText,
+                      unread: p.unread ?? 0, status: bot ? nil : (p.status ?? "offline"))
         case .groups:
             let g = groups[indexPath.row]
             cell.show(name: g.name ?? "Group chat", picture: g.icon_url, line: "\((g.members ?? []).count) members", unread: g.unread ?? 0)

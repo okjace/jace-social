@@ -174,7 +174,7 @@ assert.equal((await api(carolFresh.token, "/me", { allowError: true })).status, 
 assert.equal((await sb(`profiles?or=(uuid.eq.${carol.uuid},deleted_handle.eq.carol_test,handle.eq.carol_test)&select=uuid`)).length, 0, "nothing left of it");
 assert.equal((await sb(`messages?or=(sender.eq.${carol.uuid},recipient.eq.${carol.uuid})&select=id`)).length, 0, "its messages are gone");
 const carolAgain = await signIn("carol");
-assert.equal((await api(carolAgain.token, "/me")).handle, "carol", "her handle is free");
+assert.equal((await api(carolAgain.token, "/me")).handle, "carol_test", "her handle is free (her Jace username is carol_test now: handles are copied to Jace)");
 await api(bobS.token, "/jace/messages/sync", { body: {} });
 await purgeRun();
 assert.equal((await api(carolAgain.token, "/groups")).groups.length, 0, "other syncs don't bring Build crew back (remembered for good)");

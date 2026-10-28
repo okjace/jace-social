@@ -383,7 +383,7 @@ final class ChatViewController: UIViewController, UITableViewDataSource, UITable
 
     /// Message text as it reads: <@uuid> mentions become @names.
     private func render(_ text: String) -> String {
-        var out = text
+        var out = text.replacingOccurrences(of: "[[delete-account-now]]", with: "").replacingOccurrences(of: "[[delete-account]]", with: "")
         while let r = out.range(of: "<@[0-9a-f]{32}>", options: .regularExpression) {
             let id = String(out[r].dropFirst(2).dropLast())
             out.replaceSubrange(r, with: "@" + (people[id]?.shownName ?? "someone"))
@@ -406,6 +406,14 @@ final class ChatViewController: UIViewController, UITableViewDataSource, UITable
         }
         if !(m.body ?? "").isEmpty {
             sheet.addAction(UIAlertAction(title: "Copy text", style: .default) { [weak self] _ in UIPasteboard.general.string = self?.render(m.body ?? "") })
+        }
+        if !mine, let sender = m.sender, sender != Person.jaceBot {
+            sheet.addAction(UIAlertAction(title: "Report…", style: .destructive) { [weak self] _ in
+                guard let self = self else { return }
+                let scope: String
+                if case .direct = self.target { scope = "d" } else { scope = "c" }
+                self.report(name: self.people[sender]?.shownName ?? "someone", scope: scope, messageId: m.id)
+            })
         }
         if mine {
             sheet.addAction(UIAlertAction(title: "Edit", style: .default) { [weak self] _ in

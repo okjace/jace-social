@@ -584,3 +584,21 @@ select.btn { width: auto; }
 .embed-play img, .embed-play-blank { width: 100%; height: 100%; object-fit: cover; display: block; }
 .embed-play-button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; border-radius: 12px; background: rgba(0, 0, 0, .7); color: #fff; font-size: 20px; display: grid; place-items: center; transition: background .15s; }
 .embed-play:hover .embed-play-button { background: #ff0000; }
+/* reports and moderation (components/Moderation.tsx) */
+.report-reasons { display: grid; gap: 6px; }
+.report-reason { display: flex !important; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--bg2); cursor: pointer; text-transform: none !important; letter-spacing: 0 !important; font-size: 14px !important; color: var(--text) !important; font-weight: 500 !important; }
+.report-reason.on { outline: 2px solid var(--red); }
+.report-reason input { width: auto; margin: 0; }
+.mod-panel { display: grid; gap: 6px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.mod-line, .mod-buttons, .mod-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.mod-form input { flex: 1; min-width: 160px; }
+.mod-form select { width: auto; }
+.danger-chip { color: var(--red); }
+.warn-chip { color: #e0b44a; }
+.report-list { padding: 12px 16px; display: grid; gap: 10px; overflow-y: auto; align-content: start; }
+.report-card { background: var(--bg2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; border-left: 4px solid var(--red); }
+.report-card.resolved, .report-card.dismissed { border-left-color: var(--line2); opacity: 0.8; }
+.report-top, .report-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.report-person { display: inline-flex; gap: 6px; align-items: center; background: none; border: 0; color: var(--text); font-weight: 700; cursor: pointer; padding: 0; }
+.report-excerpt { margin: 0; padding: 8px 10px; background: var(--bg); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+.muted-composer { padding: 12px 16px; color: var(--muted); background: var(--bg2); border-radius: 8px; margin: 0 16px 12px; }

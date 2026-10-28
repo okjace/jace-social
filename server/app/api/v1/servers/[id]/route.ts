@@ -3,6 +3,7 @@
 // PATCH {name?, description?, vanity?, banner?, accent_color?, rules?, welcome?, onboarding?,
 //        system_channel?, invites_paused?}: server settings (manage server)
 // DELETE: delete the server (owner)
+import { checkName } from "@/lib/automod";
 import { ApiError, body, db, handler, me } from "@/lib/server";
 import { cleanId, cleanName, notifyChanged, profilesById, unreadCounts, type Channel } from "@/lib/chat";
 import { channelPerms, has, legacyRole, need, overridesFor, P, serverCtx } from "@/lib/perms";
@@ -68,7 +69,7 @@ export const PATCH = handler(async (req, ctx) => {
   need(sc.base, P.MANAGE_SERVER);
   const b = await body<Record<string, unknown>>(req);
   const patch: Record<string, unknown> = {};
-  if (b.name !== undefined) patch.name = cleanName(b.name, "Server name");
+  if (b.name !== undefined) { patch.name = cleanName(b.name, "Server name"); await checkName(p, "a server's name", patch.name as string); }
   if (b.description !== undefined) patch.description = text(b.description, 300, "Descriptions");
   if (b.rules !== undefined) patch.rules = text(b.rules, 2000, "Rules");
   if (b.accent_color !== undefined) {

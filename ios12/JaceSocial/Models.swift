@@ -4,6 +4,8 @@ import Foundation
 // optional, and unknown fields are ignored.
 
 struct Person: Codable {
+    /// the official Jace bot's id (server/lib/server.ts JACE_BOT)
+    static let jaceBot = "00000000000000000000000000000ace"
     var uuid: String
     var name: String?
     var online: Bool?
@@ -73,6 +75,8 @@ struct FriendsData: Codable {
     var outgoing: [Person]?
     /// people you chat with who aren't friends (they let anyone message them)
     var others: [Person]?
+    /// the official Jace bot (always there, first in Direct messages)
+    var jace: Person?
 }
 
 struct SignedIn: Codable { var token: String }

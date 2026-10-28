@@ -1,4 +1,5 @@
 "use client";
+import { ModerationPanel, ReportModal } from "./Moderation";
 import { MobileVersion } from "./MobileUpdate";
 import { has, P } from "@/lib/permbits";
 import { useEffect, useState } from "react";
@@ -32,6 +33,7 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
 }) {
   const [p, setP] = useState<FullProfile | null>(null);
   const [activity, setActivity] = useState(false);
+  const [reporting, setReporting] = useState(false);
   useEffect(() => { api<FullProfile>(`/users/${uuid}`).then(setP).catch((e) => { onError(e.message); onClose(); }); }, [uuid]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!p) return null;
   const accent = p.accent_color ?? "#2a4a37";
@@ -80,13 +82,15 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
         </div>
       )}
       {activity && <BotActivity bot={{ uuid: p.uuid, name: p.name }} server={p.bot_owner === me?.uuid ? undefined : detail?.server.id} onClose={() => setActivity(false)} />}
-      {me?.jace_staff && !p.is_you && !p.is_bot && <BanButtons p={p} onChanged={async () => {
+      {me?.jace_staff && !p.is_you && !p.is_bot && <ModerationPanel uuid={p.uuid} name={p.name} onError={onError} onChanged={async () => {
         setP(await api<FullProfile>(`/users/${uuid}`)); onChanged();
-      }} onError={onError} />}
+      }} />}
+      {reporting && <ReportModal target={{ uuid: p.uuid, name: p.name }} onClose={() => setReporting(false)} onError={onError} />}
       {!p.is_you && !p.is_bot && (
         <div className="modal-foot">
           {p.handle && <button className="btn" title="A link to this profile you can share"
             onClick={() => { void navigator.clipboard?.writeText(`${location.origin}/u/${p.handle}`); onError("Profile link copied"); }}>🔗 Copy profile link</button>}
+          {p.uuid !== JACE_BOT && <button className="btn" title="Tell Jace Social's staff" onClick={() => setReporting(true)}>🚩 Report</button>}
           <span className="grow" />
           {p.is_friend ? <>
             <button className="btn danger" onClick={removeFriend}>Remove friend</button>
@@ -100,30 +104,6 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
         </div>
       )}
     </Modal>
-  );
-}
-
-/** For the people running the official Jace bot: ban someone from all of Jace Social (and Jace). */
-function BanButtons({ p, onChanged, onError }: { p: FullProfile; onChanged: () => Promise<void>; onError: Err }) {
-  const [busy, setBusy] = useState(false);
-  const run = async (fn: () => Promise<{ jace_error?: string | null }>) => {
-    setBusy(true);
-    try { const r = await fn(); if (r.jace_error) onError(`Done here, but Jace said: ${r.jace_error}`); await onChanged(); }
-    catch (e) { onError((e as Error).message); } finally { setBusy(false); }
-  };
-  return (
-    <div className="modal-foot" style={{ justifyContent: "flex-start" }}>
-      <span className="muted small grow">Jace bot moderation</span>
-      {p.banned
-        ? <button className="btn small" disabled={busy} onClick={() => void run(() =>
-            api(`/jace-bot/ban?uuid=${p.uuid}&jace=${p.jace_name && confirm("Also unban their Jace account?") ? "1" : "0"}`, { method: "DELETE" }))}>Unban</button>
-        : <button className="btn small danger" disabled={busy} onClick={() => {
-            const reason = prompt(`Ban ${p.name} from all of Jace Social? They're signed out everywhere and can't sign in again.\nReason (optional):`);
-            if (reason === null) return;
-            const jace = !!p.jace_name && confirm(`Also ban their Jace account (@${p.jace_name})?`);
-            void run(() => api("/jace-bot/ban", { body: { uuid: p.uuid, reason, jace } }));
-          }}>⛔ Ban from Jace Social</button>}
-    </div>
   );
 }
 

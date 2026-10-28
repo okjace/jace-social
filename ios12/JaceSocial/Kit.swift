@@ -272,3 +272,29 @@ final class BarButton: UIBarButtonItem {
     }
     @objc private func tapped() { run() }
 }
+
+extension UIViewController {
+    /// Report a message or a person to Jace Social's staff: pick a reason, add details (optional).
+    func report(name: String, uuid: String? = nil, scope: String? = nil, messageId: Int? = nil) {
+        let reasons = [("spam", "Spam"), ("harassment", "Harassment or bullying"), ("hate", "Hate"), ("sexual", "Sexual content"),
+                       ("violence", "Violence or threats"), ("scam", "Scam or phishing"), ("other", "Something else")]
+        let sheet = UIAlertController(title: messageId != nil ? "Report \(name)'s message" : "Report \(name)",
+                                      message: "Jace Social's staff see this, not \(name).", preferredStyle: .actionSheet)
+        for (id, label) in reasons {
+            sheet.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
+                let a = UIAlertController(title: label, message: "Anything else staff should know? (optional)", preferredStyle: .alert)
+                a.addTextField { $0.placeholder = "Details" }
+                a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+                a.addAction(UIAlertAction(title: "Send report", style: .destructive) { _ in
+                    Session.shared.api.report(uuid: uuid, scope: scope, messageId: messageId, reason: id, details: a.textFields?.first?.text ?? "") { e in
+                        if let e = e { self?.showError(e) } else { self?.alert("Thanks", "Jace Social's staff will look at it.") }
+                    }
+                })
+                self?.present(a, animated: true)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        sheet.popoverPresentationController?.sourceView = view
+        present(sheet, animated: true)
+    }
+}

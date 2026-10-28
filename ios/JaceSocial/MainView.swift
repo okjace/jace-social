@@ -206,6 +206,16 @@ struct ChatsView: View {
                     }
                 }
                 Section("Direct messages") {
+                    if let j = f.jace {          // the official Jace bot: help, and a person when you ask for one
+                        NavigationLink(value: Route.chat(.direct(j.uuid), "Jace")) {
+                            PersonRow(person: j, line: (j.unread ?? 0) > 0 ? "New message" : "Ask me anything about Jace Social")
+                        }
+                        .listRowBackground(JaceColor.bg)
+                    }
+                    ForEach((f.others ?? []).sorted(by: dmOrder)) { p in
+                        NavigationLink(value: Route.chat(.direct(p.uuid), p.shownName)) { PersonRow(person: p, line: "Not a friend") }
+                            .listRowBackground(JaceColor.bg)
+                    }
                     ForEach(f.friends.sorted(by: dmOrder)) { p in
                         NavigationLink(value: Route.chat(.direct(p.uuid), p.shownName)) {
                             PersonRow(person: p, line: p.online ? describe(p) : "Offline")
