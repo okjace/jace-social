@@ -16,17 +16,23 @@ const REASONS: [string, string][] = [
 ];
 const REASON_NAME = Object.fromEntries(REASONS);
 
-export type ReportTarget = { scope: "d" | "c"; message_id: number; name: string } | { uuid: string; name: string };
+export type ReportTarget = { scope: "d" | "c"; message_id: number; name: string } | { uuid: string; name: string; bot?: boolean }
+  | { kind: "server"; server_id: string; name: string } | { kind: "group" | "channel" | "post"; channel_id: string; name: string };
+const WHAT: Record<string, string> = { server: "server", group: "group chat", channel: "channel", post: "post" };
 
 export function ReportModal({ target, onClose, onError }: { target: ReportTarget; onClose: () => void; onError: Err }) {
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
   const [busy, setBusy] = useState(false);
   const isMessage = "scope" in target;
+  const what = "kind" in target ? WHAT[target.kind] : null;
   async function send() {
     setBusy(true);
+    const about = "scope" in target ? { scope: target.scope, message_id: target.message_id }
+      : "kind" in target ? (target.kind === "server" ? { kind: "server", server_id: target.server_id } : { kind: target.kind, channel_id: target.channel_id })
+      : { uuid: target.uuid };
     try {
-      await api("/reports", { body: { ...(isMessage ? { scope: target.scope, message_id: target.message_id } : { uuid: target.uuid }), reason, details } });
+      await api("/reports", { body: { ...about, reason, details } });
       onError("Thanks - Jace Social's staff will look at it");
       onClose();
     } catch (e) { onError((e as Error).message); setBusy(false); }
@@ -34,8 +40,8 @@ export function ReportModal({ target, onClose, onError }: { target: ReportTarget
   return (
     <Modal onClose={onClose}>
       <div className="modal-body">
-        <h2>{isMessage ? `Report ${target.name}'s message` : `Report ${target.name}`}</h2>
-        <p className="muted small">Jace Social's staff see this (not {target.name}). {isMessage ? "They see the message as it is now, even if it's changed or deleted later." : ""}</p>
+        <h2>{isMessage ? `Report ${target.name}'s message` : what ? `Report the ${what} "${target.name}"` : `Report ${target.name}`}</h2>
+        <p className="muted small">Jace Social's staff see this{what ? "" : ` (not ${target.name})`}. {isMessage ? "They see the message as it is now, even if it's changed or deleted later." : ""}</p>
         <div className="report-reasons">
           {REASONS.map(([id, name]) => (
             <label key={id} className={`report-reason${reason === id ? " on" : ""}`}>
@@ -113,7 +119,7 @@ export function ModerationPanel({ uuid, name, onChanged, onError }: { uuid: stri
 }
 
 type ReportRow = {
-  id: number; reporter: string | null; target: string | null; scope: "d" | "c" | null; message_id: number | null;
+  id: number; kind: string | null; reporter: string | null; target: string | null; scope: "d" | "c" | null; message_id: number | null;
   channel_id: string | null; server_id: string | null; excerpt: string | null; reason: string; details: string | null;
   status: "open" | "resolved" | "dismissed"; resolution: string | null; resolved_by: string | null; created_at: string;
 };
@@ -151,7 +157,8 @@ export function Reports({ onError, onOpenProfile, onCount, refresh, back }: {
             <div key={r.id} className={`report-card ${r.status}`}>
               <div className="report-top">
                 <span className="chip">{REASON_NAME[r.reason] ?? r.reason}</span>
-                <span className="muted small">{nameOf(r.reporter)} reported {r.message_id ? `a ${r.scope === "d" ? "direct message" : r.server_id ? "server message" : "group chat message"} from` : ""}</span>
+                <span className="muted small">{nameOf(r.reporter)} reported {r.message_id ? `a ${r.scope === "d" ? "direct message" : r.server_id ? "server message" : "group chat message"} from`
+                  : r.kind === "bot" ? "the bot" : r.kind && WHAT[r.kind] ? `the ${WHAT[r.kind]}${r.target ? " by" : ""}` : ""}</span>
                 {t && <button className="report-person" onClick={() => onOpenProfile(t.uuid)}><Avatar p={{ name: t.display_name || t.name, avatar_url: t.avatar_url }} size={20} /> {t.display_name || t.name}{t.handle ? <span className="muted"> @{t.handle}</span> : null}</button>}
                 <span className="grow" /><span className="muted small">{timeLabel(r.created_at)}</span>
               </div>
@@ -163,6 +170,9 @@ export function Reports({ onError, onOpenProfile, onCount, refresh, back }: {
                 {r.status === "open" ? <>
                   {r.target && <button className="btn small" onClick={() => setModerating(moderating === r.id ? null : r.id)}>{moderating === r.id ? "Hide" : "Mute / ban…"}</button>}
                   {r.message_id && <button className="btn small danger" onClick={() => { if (confirm("Delete the message for everyone?")) void close(r, "resolved", { delete_message: true }); }}>Delete message</button>}
+                  {r.kind && WHAT[r.kind] && <button className="btn small danger" onClick={() => {
+                    if (confirm(`Delete this ${WHAT[r.kind!]} for everyone? This can't be undone.`)) void close(r, "resolved", { delete_target: true });
+                  }}>Delete {WHAT[r.kind]}</button>}
                   <span className="grow" />
                   <button className="btn small" onClick={() => void close(r, "dismissed")}>Dismiss</button>
                   <button className="btn small primary" onClick={() => { const note = prompt("What was done (optional)?") ?? ""; void close(r, "resolved", { resolution: note }); }}>Resolved</button>

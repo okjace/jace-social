@@ -1,20 +1,21 @@
-// POST {name, kind?: text|voice|announcement|category, parent_id?, topic?, private?}: add a channel
+// POST {name, kind?: text|voice|announcement|category|forum|media|stage, parent_id?, topic?, private?, available_tags?}: add a channel
 //      (manage channels). private: only you and people with roles you add later can see it.
 // PUT {order: [{id, parent_id}]}: reorder channels and move them between categories
 import { ApiError, body, db, handler, me } from "@/lib/server";
 import { channelName, cleanId, cleanName, notifyChanged } from "@/lib/chat";
 import { need, P, serverCtx } from "@/lib/perms";
+import { cleanTags } from "@/lib/forums";
 
-const KINDS = ["text", "voice", "announcement", "category"];
+const KINDS = ["text", "voice", "announcement", "category", "forum", "media", "stage"];
 
 export const POST = handler(async (req, ctx) => {
   const p = await me(req);
   const id = cleanId((await ctx.params).id);
   const sc = await serverCtx(id, p.uuid);
   need(sc.base, P.MANAGE_CHANNELS);
-  const b = await body<{ name?: string; topic?: string; kind?: string; parent_id?: string | null; private?: boolean }>(req);
+  const b = await body<{ name?: string; topic?: string; kind?: string; parent_id?: string | null; private?: boolean; available_tags?: unknown }>(req);
   const kind = KINDS.includes(String(b.kind)) ? String(b.kind) : "text";
-  const { count } = await db().from("channels").select("id", { count: "exact", head: true }).eq("server_id", id);
+  const { count } = await db().from("channels").select("id", { count: "exact", head: true }).eq("server_id", id).neq("kind", "post");
   if ((count ?? 0) >= 100) throw new ApiError(400, "A server can have up to 100 channels");
   let parent: string | null = null;
   if (b.parent_id && kind !== "category") {
@@ -24,9 +25,10 @@ export const POST = handler(async (req, ctx) => {
   }
   const topic = (b.topic ?? "").trim().slice(0, 200) || null;
   // categories keep their capitals (like Discord shows them); other channels are lowercase-with-dashes
-  const name = kind === "category" || kind === "voice" ? cleanName(b.name, "Name") : channelName(b.name);
+  const name = ["category", "voice", "stage"].includes(kind) ? cleanName(b.name, "Name") : channelName(b.name);
+  const available_tags = (kind === "forum" || kind === "media") && b.available_tags !== undefined ? cleanTags(b.available_tags) : [];
   const { data, error } = await db().from("channels")
-    .insert({ server_id: id, name, topic, kind, parent_id: parent, position: count ?? 0 }).select("*").single();
+    .insert({ server_id: id, name, topic, kind, parent_id: parent, position: count ?? 0, available_tags }).select("*").single();
   if (error) throw error;
   if (b.private) {
     const everyone = sc.roles.find((r) => r.is_default);

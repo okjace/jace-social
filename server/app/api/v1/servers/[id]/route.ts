@@ -13,20 +13,20 @@ export const GET = handler(async (req, ctx) => {
   const id = cleanId((await ctx.params).id);
   const sc = await serverCtx(id, p.uuid);
   const [{ data: chans }, { data: members }, { data: memberRoles }] = await Promise.all([
-    db().from("channels").select("*").eq("server_id", id).order("position").order("created_at"),
+    db().from("channels").select("*").eq("server_id", id).neq("kind", "post").order("position").order("created_at"),   // (forum posts: /channels/{forum}/posts)
     db().from("server_members").select("uuid, role, joined_at, nickname, timeout_until, onboarded").eq("server_id", id),
     db().from("server_member_roles").select("uuid, role_id").eq("server_id", id),
   ]);
-  const voiceIds = (chans ?? []).filter((c) => c.kind === "voice").map((c) => c.id);
+  const voiceIds = (chans ?? []).filter((c) => c.kind === "voice" || c.kind === "stage").map((c) => c.id);
   const { data: voice } = voiceIds.length
-    ? await db().from("voice_states").select("channel_id, uuid, muted, deafened, streaming, last_seen").in("channel_id", voiceIds)
-    : { data: [] as { channel_id: string; uuid: string; muted: boolean; deafened: boolean; streaming: boolean; last_seen: string }[] };
+    ? await db().from("voice_states").select("channel_id, uuid, muted, deafened, streaming, last_seen, speaker").in("channel_id", voiceIds)
+    : { data: [] as { channel_id: string; uuid: string; muted: boolean; deafened: boolean; streaming: boolean; last_seen: string; speaker: boolean }[] };
   const all = (chans ?? []) as Channel[];
   const overrides = await overridesFor(all.map((c) => c.id));
   const visible = all.map((c) => ({ ...c, perms: channelPerms(sc, c, overrides) }))
     .filter((c) => has(c.perms, P.VIEW) || (c.kind === "category" && all.some((x) => x.parent_id === c.id && has(channelPerms(sc, x, overrides), P.VIEW))));
   const people = await profilesById((members ?? []).map((m) => m.uuid));
-  const unread = await unreadCounts(p.uuid, visible.filter((c) => c.kind !== "category" && c.kind !== "voice").map((c) => c.id));
+  const unread = await unreadCounts(p.uuid, visible.filter((c) => c.kind === "text" || c.kind === "announcement").map((c) => c.id));
   const fresh = Date.now() - 45_000;
   const mine = (memberRoles ?? []);
   const canManage = has(sc.base, P.MANAGE_SERVER);

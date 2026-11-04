@@ -3,7 +3,7 @@
 import { guardPost } from "@/lib/automod";
 import { checkUploads } from "@/lib/storage";
 import { ApiError, body, db, handler, me } from "@/lib/server";
-import { MESSAGE_COLUMNS, channelFor, olderThan, postMessage, profilesById, type Attachment } from "@/lib/chat";
+import { CHAT_KINDS, MESSAGE_COLUMNS, channelFor, olderThan, postMessage, profilesById, type Attachment } from "@/lib/chat";
 import { pullSoon, pushChannelLater } from "@/lib/jaceSync";
 import { has, P } from "@/lib/perms";
 import { reactionsFor, repliedTo } from "@/lib/reactions";
@@ -42,7 +42,8 @@ export const GET = handler(async (req, ctx) => {
 export const POST = handler(async (req, ctx) => {
   const p = await me(req);
   const { channel, members, ctx: server, perms } = await channelFor((await ctx.params).id, p.uuid);
-  if (channel.kind === "category" || channel.kind === "voice") throw new ApiError(400, "You can't send messages there");
+  if (!CHAT_KINDS.includes(channel.kind))                 // forums: post with /channels/{id}/posts, then reply in the post
+    throw new ApiError(400, channel.kind === "forum" || channel.kind === "media" ? "Start a post in this forum instead" : "You can't send messages there");
   if (server?.timeoutUntil && new Date(server.timeoutUntil) > new Date())
     throw new ApiError(403, `You're timed out until ${new Date(server.timeoutUntil).toLocaleString()}`);
   if (!has(perms, P.SEND) || (channel.kind === "announcement" && !has(perms, P.MANAGE_MESSAGES)))

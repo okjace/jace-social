@@ -38,7 +38,12 @@ export async function jaceUserFromCode(code: string): Promise<JaceUser> {
   });
   const t = await r.json().catch(() => ({}));
   if (!r.ok || !t.access_token) throw new ApiError(401, `Jace sign-in failed (${t.error_description || t.error || r.status})`);
-  const u = await fetch(`${JACE}/api/oauth/userinfo`, { headers: { Authorization: `Bearer ${t.access_token}` } });
+  return jaceUserFromToken(String(t.access_token), String(t.scope ?? ""));
+}
+
+/** Who a Jace access token (issued to Jace Social) belongs to, from Jace's userinfo. */
+export async function jaceUserFromToken(accessToken: string, scope: string): Promise<JaceUser> {
+  const u = await fetch(`${JACE}/api/oauth/userinfo`, { cache: "no-store", headers: { Authorization: `Bearer ${accessToken}` } });
   const d = await u.json().catch(() => ({}));
   if (!u.ok) throw new ApiError(401, "Couldn't read your Jace account");
   // accept the usual OpenID-style names for each field
@@ -47,7 +52,30 @@ export async function jaceUserFromCode(code: string): Promise<JaceUser> {
   if (!sub) throw new ApiError(502, "Jace didn't say who you are");
   const picture = typeof (d.picture ?? d.avatar_url ?? d.image) === "string" ? String(d.picture ?? d.avatar_url ?? d.image) : null;
   return { sub, username: username || "Jace user", picture, banned: d.banned === true, muted: d.muted === true,
-           token: String(t.access_token), scope: String(t.scope ?? "") };
+           token: accessToken, scope };
+}
+
+/**
+ * Jace's token introspection (RFC 7662), as Jace Social: is this access token valid, and was it
+ * issued to Jace Social (not to another app)? -> {sub, scope}, or null for anything else (expired,
+ * another app's, a banned account's, or Jace couldn't be asked). The token is never logged.
+ */
+export async function introspectJace(accessToken: string): Promise<{ sub: string; scope: string } | null> {
+  const id = process.env.JACE_OAUTH_CLIENT_ID, secret = process.env.JACE_OAUTH_CLIENT_SECRET;
+  if (!id || !secret) return null;
+  try {
+    const r = await fetch(`${JACE}/api/oauth/introspect`, {
+      method: "POST", cache: "no-store", signal: AbortSignal.timeout(10_000),
+      headers: { "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}` },
+      body: JSON.stringify({ token: accessToken }),
+    });
+    const d = await r.json().catch(() => ({})) as { active?: boolean; client_id?: string; sub?: string; scope?: string; exp?: number };
+    if (!r.ok || d.active !== true || d.client_id !== id || !d.sub) return null;
+    if (typeof d.exp === "number" && d.exp * 1000 <= Date.now()) return null;
+    return { sub: String(d.sub), scope: String(d.scope ?? "") };
+  } catch {
+    return null;
+  }
 }
 
 export type JaceModeration = {

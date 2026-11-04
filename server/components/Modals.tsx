@@ -76,9 +76,11 @@ export function ProfileModal({ uuid, onClose, onMessage, onChanged, onError, det
           <div className="small muted">Servers you share: {p.mutual_servers.map((s) => s.name).join(", ")}</div>
         )}
       </div>
-      {p.is_bot && (p.bot_owner === me?.uuid || (detail && member && has(detail.perms, P.MANAGE_SERVER))) && (
+      {p.is_bot && (
         <div className="modal-foot">
-          <button className="btn" onClick={() => setActivity(true)}>📜 See everything it does</button>
+          {(p.bot_owner === me?.uuid || (detail && member && has(detail.perms, P.MANAGE_SERVER))) && <button className="btn" onClick={() => setActivity(true)}>📜 See everything it does</button>}
+          <span className="grow" />
+          {p.uuid !== JACE_BOT && p.bot_owner !== me?.uuid && <button className="btn" title="Tell Jace Social's staff" onClick={() => setReporting(true)}>🚩 Report bot</button>}
         </div>
       )}
       {activity && <BotActivity bot={{ uuid: p.uuid, name: p.name }} server={p.bot_owner === me?.uuid ? undefined : detail?.server.id} onClose={() => setActivity(false)} />}
@@ -642,7 +644,7 @@ function DesktopVersion() {
 /** Desktop app: open on sign-in, and the shortcut for the game overlay. */
 function DesktopOptions({ d }: { d: DesktopBridge }) {
   const [s, setS] = useState<{ startup: boolean | null; overlayShortcut: string; overlayError: string | null; shortcutsUnsupported: string | null;
-    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean } | null>(null);
+    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean; jaceOsSignIn?: boolean | null } | null>(null);
   const [recording, setRecording] = useState(false);
   const [msg, setMsg] = useState("");
   const load = () => void d.getDesktopSettings!().then(setS);
@@ -677,6 +679,12 @@ function DesktopOptions({ d }: { d: DesktopBridge }) {
           onChange={async (e) => { const r = await d.setStartup!(e.target.checked); if (r.error) setMsg(r.error); load(); }} />
         Open Jace Social when I sign in to my computer
       </label>
+      {s.jaceOsSignIn !== null && s.jaceOsSignIn !== undefined && d.setJaceOsSignIn && (
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input type="checkbox" checked={s.jaceOsSignIn} onChange={(e) => { d.setJaceOsSignIn!(e.target.checked); setS({ ...s, jaceOsSignIn: e.target.checked }); }} />
+          Sign in automatically with this computer&apos;s Jace account (Jace OS)
+        </label>
+      )}
       <span>Game overlay shortcut</span>
       {s.shortcutsUnsupported ? <span>{s.shortcutsUnsupported}</span> : s.overlayManagedByDesktop ? (
         // Wayland: the desktop asks to allow the shortcut, and its settings choose the keys

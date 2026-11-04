@@ -1,5 +1,8 @@
 # Jace Social desktop app changelog
 
+## 1.0.16
+- **Jace OS: signed in with your computer's Jace account.** When Jace Social starts on Jace OS and you aren't signed in, it signs you in with the Jace account the computer is signed in to - no browser, no code. If you haven't agreed to the Terms on this computer yet, they show first. If it can't (not Jace OS, the computer isn't signed in to Jace, or no internet), you just see the normal sign-in. It doesn't sign you straight back in after you sign out; it tries again the next time the app starts. Turn it off in Settings → Desktop app.
+
 ## 1.0.15
 - Fixes Jace Social not opening from the app menu after an update, on Linux with AppImageLauncher installed (seen on niri). AppImageLauncher stepped in when the app started, treated each updated Jace Social as a new AppImage, and crashed on Wayland before Jace Social even started. The menu entry, the desktop shortcut, opening at sign-in, the `jace-social` command, the overlay key and the app's own restarts now start Jace Social directly. Older installs are fixed the next time the app starts.
 - The overlay floats on top of what you're doing on niri, Hyprland and Sway, instead of being tiled next to your other windows.

@@ -1,10 +1,11 @@
-// Reports: anyone can report a message, or a person, to Jace Social's staff (Jace's admins and the
+// Reports: anyone can report a message, a person, a bot, a server, a group chat, a channel or a forum
+// post to Jace Social's staff (Jace's admins and the
 // Jace bot's owner - lib/jaceBot.ts isJaceStaff). Staff see them in Reports (components/Reports.tsx),
 // then mute or ban (lib/moderation.ts), delete the message, or dismiss. The message is copied as it
 // was when reported, so editing or deleting it doesn't hide what was reported.
 // Table: reports (supabase/018_moderation.sql).
 import { ApiError, cleanUuid, db, inboxesOf, JACE_BOT, notify, type Profile } from "./server";
-import { loadChannelMessage } from "./chat";
+import { channelFor, cleanId, loadChannelMessage, notifyChanged } from "./chat";
 
 export const REASONS = ["spam", "harassment", "hate", "sexual", "violence", "scam", "other"] as const;
 export type Reason = (typeof REASONS)[number];
@@ -23,8 +24,10 @@ async function staffInboxes(): Promise<string[]> {
   return ids.size ? inboxesOf([...ids]) : [];
 }
 
-/** Report a message ({scope: d | c, id}) or a person (uuid). */
-export async function report(req: Request, p: Profile, b: { uuid?: string; scope?: string; message_id?: number; reason?: string; details?: string }) {
+/** Report a message ({scope: d | c, message_id}), a person or bot (uuid), or {kind: server, server_id} /
+ *  {kind: group | channel | post, channel_id}. */
+export async function report(req: Request, p: Profile, b: { uuid?: string; scope?: string; message_id?: number; reason?: string; details?: string;
+  kind?: string; server_id?: string; channel_id?: string }) {
   const reason = String(b.reason ?? "") as Reason;
   if (!REASONS.includes(reason)) throw new ApiError(400, "Pick a reason");
   const details = String(b.details ?? "").trim().slice(0, 1000) || null;
@@ -33,8 +36,19 @@ export async function report(req: Request, p: Profile, b: { uuid?: string; scope
   const { count } = await db().from("reports").select("id", { count: "exact", head: true }).eq("reporter", p.uuid).gt("created_at", hourAgo);
   if ((count ?? 0) >= 10) throw new ApiError(429, "You've sent a lot of reports - try again in a while");
 
-  const row: Record<string, unknown> = { reporter: p.uuid, reason, details };
-  if (b.scope === "d" && b.message_id) {
+  const row: Record<string, unknown> = { reporter: p.uuid, reason, details, kind: "message" };
+  if (b.kind === "server" && b.server_id) {
+    const id = cleanId(b.server_id);
+    const { data: s } = await db().from("servers").select("id, name, description, owner").eq("id", id).maybeSingle();
+    if (!s) throw new ApiError(404, "Server not found");
+    Object.assign(row, { kind: "server", server_id: s.id, target: s.owner, excerpt: [s.name, s.description].filter(Boolean).join(" - ") });
+  } else if ((b.kind === "group" || b.kind === "channel" || b.kind === "post") && b.channel_id) {
+    const { channel: ch } = await channelFor(b.channel_id, p.uuid);           // (checks they can see it)
+    const kind = ch.kind === "post" ? "post" : ch.server_id ? "channel" : "group";
+    let excerpt = ch.kind === "post" ? `${ch.name}${ch.topic ? `: ${ch.topic}` : ""}` : ch.server_id ? `#${ch.name}${ch.topic ? ` - ${ch.topic}` : ""}` : (ch.name ?? "a group chat");
+    if (kind === "group") excerpt = `Group chat: ${excerpt}`;
+    Object.assign(row, { kind, channel_id: ch.id, server_id: ch.server_id, target: kind === "channel" ? null : ch.owner, excerpt });
+  } else if (b.scope === "d" && b.message_id) {
     const { data: m } = await db().from("messages").select("id, sender, recipient, body, attachments").eq("id", Number(b.message_id)).maybeSingle();
     if (!m || ![m.sender, m.recipient].includes(p.uuid)) throw new ApiError(404, "Message not found");
     Object.assign(row, { target: m.sender, scope: "d", message_id: m.id, excerpt: excerptOf(m) });
@@ -44,13 +58,13 @@ export async function report(req: Request, p: Profile, b: { uuid?: string; scope
     Object.assign(row, { target: m.sender, scope: "c", message_id: m.id, channel_id: channel.id, server_id: channel.server_id, excerpt: excerptOf(m) });
   } else if (b.uuid) {
     const uuid = cleanUuid(b.uuid);
-    const { data: t } = await db().from("profiles").select("uuid").eq("uuid", uuid).maybeSingle();
+    const { data: t } = await db().from("profiles").select("uuid, is_bot, bot_owner, bio").eq("uuid", uuid).maybeSingle();
     if (!t) throw new ApiError(404, "Player not found");
-    row.target = uuid;
+    Object.assign(row, { target: uuid, kind: t.is_bot ? "bot" : "person", excerpt: t.bio ?? null });
   } else {
     throw new ApiError(400, "What are you reporting?");
   }
-  if (row.target === p.uuid) throw new ApiError(400, "That's you");
+  if (row.target === p.uuid && (row.kind === "person" || row.kind === "message")) throw new ApiError(400, "That's you");
   if (row.target === JACE_BOT) throw new ApiError(400, "The Jace bot can't be reported - tell it what went wrong instead");
   const { data, error } = await db().from("reports").insert(row).select("id").single();
   if (error) throw new ApiError(503, "Reports aren't set up yet - run supabase/018_moderation.sql");
@@ -78,8 +92,9 @@ export async function listReports(status: "open" | "all") {
   return { reports: data ?? [], people: Object.fromEntries((people ?? []).map((x) => [x.uuid, x])), open: open ?? 0 };
 }
 
-/** Staff: close a report (resolved / dismissed), maybe deleting the reported message. */
-export async function closeReport(by: Profile, id: number, b: { status?: string; resolution?: string; delete_message?: boolean }) {
+/** Staff: close a report (resolved / dismissed), maybe deleting the reported message, or the reported
+ *  post, channel, group chat or server (delete_target). */
+export async function closeReport(by: Profile, id: number, b: { status?: string; resolution?: string; delete_message?: boolean; delete_target?: boolean }) {
   const { data: r } = await db().from("reports").select("*").eq("id", id).maybeSingle();
   if (!r) throw new ApiError(404, "Report not found");
   const status = b.status === "dismissed" ? "dismissed" : b.status === "open" ? "open" : "resolved";
@@ -107,8 +122,40 @@ export async function closeReport(by: Profile, id: number, b: { status?: string;
     }
     resolution = [resolution, "message deleted"].filter(Boolean).join("; ");
   }
+  if (b.delete_target) {
+    resolution = [resolution, await deleteReported(r)].filter(Boolean).join("; ");
+  }
   await db().from("reports").update({
     status, resolution, resolved_by: status === "open" ? null : by.uuid, resolved_at: status === "open" ? null : new Date().toISOString(),
   }).eq("id", id);
   return { ok: true };
+}
+
+/** Staff deleting what a report is about. -> what was done */
+async function deleteReported(r: { kind?: string | null; server_id?: string | null; channel_id?: string | null }): Promise<string> {
+  if (r.kind === "server" && r.server_id) {
+    const { data: members } = await db().from("server_members").select("uuid").eq("server_id", r.server_id);
+    await db().from("servers").delete().eq("id", r.server_id);
+    await notifyChanged((members ?? []).map((m) => m.uuid), "servers", { kind: "deleted", server_id: r.server_id });
+    return "server deleted";
+  }
+  if ((r.kind === "group" || r.kind === "channel" || r.kind === "post") && r.channel_id) {
+    const { data: ch } = await db().from("channels").select("id, server_id, parent_id, kind").eq("id", r.channel_id).maybeSingle();
+    if (!ch) return "already gone";
+    let who: string[] = [];
+    if (ch.server_id) {
+      const { data: sm } = await db().from("server_members").select("uuid").eq("server_id", ch.server_id);
+      who = (sm ?? []).map((x) => x.uuid as string);
+    } else {
+      const { data: cm } = await db().from("channel_members").select("uuid").eq("channel_id", ch.id);
+      who = (cm ?? []).map((x) => x.uuid as string);
+    }
+    if (ch.kind !== "post") await db().from("channels").update({ parent_id: null }).eq("parent_id", ch.id).neq("kind", "post");
+    await db().from("channels").delete().eq("id", ch.id);
+    if (ch.kind === "post") await notifyChanged(who, "channel", { channel_id: ch.parent_id, server_id: ch.server_id, post_id: ch.id, deleted: true });
+    else if (ch.server_id) await notifyChanged(who, "servers", { kind: "changed", server_id: ch.server_id });
+    else await notifyChanged(who, "groups", { kind: "deleted", id: ch.id });
+    return `${r.kind} deleted`;
+  }
+  return "";
 }

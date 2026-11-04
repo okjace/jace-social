@@ -2,7 +2,7 @@
 // Channel settings: name, topic, slowmode, category, user limit (voice) and permissions
 // for roles or members (allow / deny / inherit).
 import { useState } from "react";
-import { api, type Channel, type Override, type ServerDetail } from "@/lib/client";
+import { api, type Channel, type ForumTag, type Override, type ServerDetail } from "@/lib/client";
 import { ALL, has, P } from "@/lib/permbits";
 import { PermissionList } from "./ServerSettings";
 import { Modal } from "./ui";
@@ -19,6 +19,7 @@ export function ChannelSettings({ detail, channel, onClose, onChanged, onError }
   const [slowmode, setSlowmode] = useState(channel.slowmode ?? 0);
   const [limit, setLimit] = useState(channel.user_limit ?? 0);
   const [parent, setParent] = useState(channel.parent_id ?? "");
+  const [tags, setTags] = useState<ForumTag[]>(channel.available_tags ?? []);      // forums and media channels
   const run = async (fn: () => Promise<unknown>) => { try { await fn(); onChanged(); return true; } catch (e) { onError((e as Error).message); return false; } };
   const categories = detail.channels.filter((c) => c.kind === "category");
   const kind = channel.kind ?? "text";
@@ -44,7 +45,7 @@ export function ChannelSettings({ detail, channel, onClose, onChanged, onError }
     <Modal onClose={onClose} wide>
       <div className="settings">
         <nav>
-          <div className="side-label" style={{ paddingTop: 4 }}>{kind === "category" ? channel.name : `${kind === "voice" ? "🔊" : "#"} ${channel.name}`}</div>
+          <div className="side-label" style={{ paddingTop: 4 }}>{kind === "category" ? channel.name : `${({ voice: "🔊", stage: "🎙️", forum: "💬", media: "🖼️", announcement: "📣" } as Record<string, string>)[kind] ?? "#"} ${channel.name}`}</div>
           <button className={`side-item${tab === "general" ? " active" : ""}`} onClick={() => setTab("general")}>General</button>
           {canRoles && <button className={`side-item${tab === "permissions" ? " active" : ""}`} onClick={() => setTab("permissions")}>Permissions</button>}
           <button className="side-item" style={{ color: "var(--red)" }} onClick={async () => {
@@ -57,7 +58,20 @@ export function ChannelSettings({ detail, channel, onClose, onChanged, onError }
             <h2>{kind === "category" ? "Category" : "Channel"} settings</h2>
             <label>Name<input value={name} maxLength={48} onChange={(e) => setName(e.target.value)} /></label>
             {kind !== "category" && kind !== "voice" && <label>Topic<textarea rows={2} value={topic} maxLength={200} onChange={(e) => setTopic(e.target.value)} /></label>}
-            {kind !== "category" && kind !== "voice" && (
+            {(kind === "forum" || kind === "media") && (
+              <div className="forum-tags-edit">
+                <span>Tags people can put on posts (up to 20)</span>
+                {tags.map((t, i) => (
+                  <div key={t.id} className="forum-tag-row">
+                    <input className="tag-emoji" placeholder="🙂" maxLength={4} value={t.emoji ?? ""} onChange={(e) => setTags(tags.map((x, j) => (j === i ? { ...x, emoji: e.target.value } : x)))} />
+                    <input placeholder="Tag name" maxLength={24} value={t.name} onChange={(e) => setTags(tags.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+                    <button className="icon-btn" title="Remove tag" onClick={() => setTags(tags.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                ))}
+                {tags.length < 20 && <button className="btn small" onClick={() => setTags([...tags, { id: `n${Date.now().toString(36)}`.slice(0, 12), name: "", emoji: null }])}>＋ Add a tag</button>}
+              </div>
+            )}
+            {kind !== "category" && kind !== "voice" && kind !== "stage" && kind !== "forum" && kind !== "media" && (
               <label>Slowmode (time between someone's messages)
                 <select value={slowmode} onChange={(e) => setSlowmode(Number(e.target.value))}>{SLOWMODE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
               </label>
@@ -76,7 +90,8 @@ export function ChannelSettings({ detail, channel, onClose, onChanged, onError }
               </label>
             )}
             <button className="btn primary" style={{ justifySelf: "start" }} onClick={() => void run(() => api(`/channels/${channel.id}`, { method: "PATCH",
-              body: { name, topic, slowmode, user_limit: limit, parent_id: kind === "category" ? undefined : parent || null } }))}>Save</button>
+              body: { name, topic, slowmode, user_limit: limit, parent_id: kind === "category" ? undefined : parent || null,
+                ...((kind === "forum" || kind === "media") ? { available_tags: tags.filter((t) => t.name.trim()) } : {}) } }))}>Save</button>
           </> : <>
             <h2>Permissions</h2>
             <label className="check">
@@ -104,7 +119,7 @@ export function ChannelSettings({ detail, channel, onClose, onChanged, onError }
               </select>
             </div>
             <PermissionList value={0} onChange={() => {}} editable={detail.owner ? ALL : detail.perms}
-              allowedBits={kind === "voice" ? P.VIEW | P.CONNECT | P.SPEAK | P.STREAM | P.MANAGE_CHANNELS | P.MANAGE_ROLES : kind === "category" ? undefined : ALL & ~(P.CONNECT | P.SPEAK | P.STREAM)}
+              allowedBits={kind === "voice" || kind === "stage" ? P.VIEW | P.CONNECT | P.SPEAK | P.STREAM | P.MANAGE_CHANNELS | P.MANAGE_ROLES : kind === "category" ? undefined : ALL & ~(P.CONNECT | P.SPEAK | P.STREAM)}
               tri={{ allow: shown.allow, deny: shown.deny, set: (allow, deny) => setDraft({ allow, deny }) }} />
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn primary" disabled={!draft} onClick={async () => {

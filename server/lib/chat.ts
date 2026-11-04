@@ -12,8 +12,17 @@ export const MAX_SERVERS = 100;        // servers one player can be in
 export type Channel = {
   id: string; server_id: string | null; name: string; topic: string | null; icon_url: string | null;
   owner: string | null; position: number; created_at: string;
-  kind: "text" | "voice" | "announcement" | "category"; parent_id: string | null; slowmode: number; user_limit: number;
+  kind: "text" | "voice" | "announcement" | "category" | "forum" | "media" | "stage" | "post";
+  parent_id: string | null; slowmode: number; user_limit: number;
+  // forums (lib/forums.ts, supabase/019_channel_types.sql): a forum's tags; a post's tags and state
+  available_tags?: { id: string; name: string; emoji?: string | null }[]; tags?: string[];
+  locked?: boolean; pinned?: boolean; message_count?: number; last_activity?: string | null;
 };
+
+/** Kinds that hold a conversation of their own (not categories, voice, stages, or forums - forums hold posts). */
+export const CHAT_KINDS = ["text", "announcement", "post"];
+export const FORUM_KINDS = ["forum", "media"];
+export const VOICE_KINDS = ["voice", "stage"];
 export type Attachment = { url: string; name: string; type: string; size: number; width?: number; height?: number; no_preview?: boolean };
 
 /** The columns every message read returns. */
@@ -88,9 +97,17 @@ export async function channelFor(channelId: string, uuid: string) {
   if (ch.server_id) {
     let ctx: ServerCtx;
     try { ctx = await serverCtx(ch.server_id, uuid); } catch { throw new ApiError(404, "Chat not found"); }
-    const perms = await permsIn(ctx, ch);
+    // a forum post: what you can do (and who sees it) is its forum's; a locked post takes replies from moderators only
+    let rules = ch;
+    if (ch.kind === "post" && ch.parent_id) {
+      const { data: forum } = await db().from("channels").select("*").eq("id", ch.parent_id).maybeSingle();
+      if (!forum) throw new ApiError(404, "Chat not found");
+      rules = forum as Channel;
+    }
+    let perms = await permsIn(ctx, rules);
     if (!has(perms, P.VIEW)) throw new ApiError(404, "Chat not found");
-    return { channel: ch, members: await channelViewers(ch), ctx, perms };
+    if (ch.kind === "post" && ch.locked && !has(perms, P.MANAGE_MESSAGES)) perms &= ~P.SEND;
+    return { channel: ch, members: await channelViewers(rules), ctx, perms };
   }
   const { data: rows } = await db().from("channel_members").select("uuid").eq("channel_id", ch.id);
   const members = (rows ?? []).map((r) => r.uuid as string);
@@ -167,6 +184,11 @@ export async function postMessage(channel: Channel, members: string[], sender: P
   if (sender) {
     await db().from("channel_reads").upsert({ channel_id: channel.id, uuid: sender.uuid, last_read: data.id });
   }
+  if (channel.kind === "post") {                  // forum posts: most recently active first (lib/forums.ts)
+    const now = new Date().toISOString();
+    await db().from("channels").update({ message_count: (channel.message_count ?? 0) + 1, last_activity: now }).eq("id", channel.id);
+    if (channel.parent_id) await db().from("channels").update({ last_activity: now }).eq("id", channel.parent_id);
+  }
   if (sender?.is_bot) {     // every message a bot sends (hosted, block or through the API) goes in its activity log
     const { logBot, short } = await import("./botlog");
     await logBot(sender.uuid, "message", `Sent in ${channel.server_id ? "#" : ""}${channel.name ?? "a group chat"}: ${short(body, 300)}`,
@@ -176,6 +198,7 @@ export async function postMessage(channel: Channel, members: string[], sender: P
   const payload = {
     channel_id: channel.id, server_id: channel.server_id, id: data.id,
     from: sender?.uuid ?? null, name: sender ? (sender.display_name || sender.name) : null,
+    ...(channel.kind === "post" ? { forum_id: channel.parent_id } : {}),       // (a forum post: the forum view is open)
   };
   const others = members.filter((m) => m !== sender?.uuid);
   await notify(await inboxesOf(others.filter((m) => !pinged.has(m))), "channel", payload);
@@ -205,7 +228,7 @@ export async function olderThan(table: "messages" | "channel_messages", id: numb
 }
 
 /** Tell players something about a group or server changed (members, names, channels). */
-export async function notifyChanged(uuids: string[], event: "groups" | "servers", payload: Record<string, unknown>) {
+export async function notifyChanged(uuids: string[], event: "groups" | "servers" | "channel", payload: Record<string, unknown>) {
   await notify(await inboxesOf(uuids), event, payload);
 }
 

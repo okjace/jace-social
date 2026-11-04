@@ -4,16 +4,20 @@
 // connections. Screen sharing adds a video track and renegotiates each connection; if
 // two people renegotiate at once, the one with the smaller id gives way ("polite peer").
 // Like direct calls, each description is sent once ICE gathering is done (no trickle).
+// Stages: only speakers talk. The audience connects only to speakers (not to each other), so a stage
+// holds more people; someone invited up connects to everyone, someone moved down drops the rest.
 import { api } from "./client";
 import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, readStreams, tagStreams, type StreamKinds } from "./media";
 
-export type Participant = { uuid: string; muted: boolean; deafened: boolean; streaming: boolean; person?: { name: string; avatar_url: string | null } };
+export type Participant = { uuid: string; muted: boolean; deafened: boolean; streaming: boolean; person?: { name: string; avatar_url: string | null };
+  speaker?: boolean; hand_at?: string | null };       // stages: speaking, or a raised hand
 export type RoomState = {
   channelId: string | null; serverId: string | null; channelName: string;
   participants: Participant[]; muted: boolean; deafened: boolean; sharing: boolean; noMic: boolean;
   speaking: Record<string, boolean>; screens: Record<string, MediaStream>; connecting: boolean;
   camera: boolean; cameras: Record<string, MediaStream>;      // who has their camera on (you included)
   canVideo: boolean;                                         // the "Video" permission: camera and screen sharing
+  stage: boolean; moderator: boolean;                        // a stage channel; you pick who speaks there
 };
 
 type Peer = {
@@ -23,7 +27,8 @@ type Peer = {
 };
 
 const EMPTY: RoomState = { channelId: null, serverId: null, channelName: "", participants: [], muted: false, deafened: false,
-  sharing: false, noMic: false, speaking: {}, screens: {}, connecting: false, camera: false, cameras: {}, canVideo: true };
+  sharing: false, noMic: false, speaking: {}, screens: {}, connecting: false, camera: false, cameras: {}, canVideo: true,
+  stage: false, moderator: false };
 
 /** Our description, as soon as it has usable network routes (lib/media.ts describeWhenReady). */
 function described(pc: RTCPeerConnection, desc: RTCSessionDescriptionInit) {
@@ -62,7 +67,7 @@ export class Voice {
     try {
       const [{ ice_servers }, room] = await Promise.all([
         api<{ ice_servers: RTCIceServer[] }>("/calls/ice"),
-        api<{ participants: Participant[]; can_speak: boolean; can_stream?: boolean }>(`/channels/${channelId}/voice`, { body: { action: "join" } }),
+        api<{ participants: Participant[]; can_speak: boolean; can_stream?: boolean; stage?: boolean; moderator?: boolean }>(`/channels/${channelId}/voice`, { body: { action: "join" } }),
       ]);
       this.ice = ice_servers;
       try {
@@ -77,9 +82,10 @@ export class Voice {
       const old = await api<{ latest: number }>(`/voice/signal?channel_id=${encodeURIComponent(channelId)}&latest=1`).catch(() => ({ latest: 0 }));
       this.joinedAfter = old.latest;
       this.lastSeen = Math.max(this.lastSeen, old.latest);
-      this.set({ participants: room.participants, muted: !room.can_speak, connecting: false, canVideo: room.can_stream !== false });
-      // the one who joins connects to everyone already here
-      for (const p of room.participants) if (p.uuid !== me) await this.call(p.uuid);
+      this.set({ participants: room.participants, muted: !room.can_speak, connecting: false, canVideo: room.can_stream !== false,
+        stage: !!room.stage, moderator: !!room.moderator });
+      // the one who joins connects to everyone already here (on a stage: to the speakers, or everyone if speaking)
+      for (const p of room.participants) if (p.uuid !== me && this.linked(p, room.participants)) await this.call(p.uuid);
       this.beat = setInterval(() => void this.sendState({}), 20_000);
       // signals whose live event was missed (someone shown in the room but never connected)
       this.catchTimer = setInterval(() => void this.catchUp(), 3000);
@@ -109,8 +115,33 @@ export class Voice {
     if (id) await api(`/channels/${id}/voice`, { body: { action: "leave" } }).catch(() => {});
   }
 
+  /** On a stage: am I speaking? (everywhere else: always) */
+  get speaking() { return !this.state.stage || !!this.state.participants.find((p) => p.uuid === this.me)?.speaker; }
+
+  /** Do I need a connection to them? Everyone, except on a stage: two people in the audience don't. */
+  private linked(p: Participant, all: Participant[]) {
+    if (!this.state.stage) return true;
+    const mine = all.find((x) => x.uuid === this.me);
+    return !!mine?.speaker || !!p.speaker;
+  }
+
+  /** Stages: raise (or lower) your hand to ask to speak. */
+  async raiseHand(raised: boolean) {
+    if (!this.state.channelId) return;
+    try { await api(`/channels/${this.state.channelId}/voice`, { body: { action: "hand", raised } }); await this.refresh(); }
+    catch (e) { this.onError((e as Error).message); }
+  }
+
+  /** Stages: moderators invite someone up to speak or move them to the audience; anyone can step down. */
+  async setSpeaker(uuid: string, on: boolean) {
+    if (!this.state.channelId) return;
+    try { await api(`/channels/${this.state.channelId}/voice`, { body: { action: "speaker", uuid, on } }); await this.refresh(); }
+    catch (e) { this.onError((e as Error).message); }
+  }
+
   async toggleMute() {
     void this.audioCtx?.resume().catch(() => {});
+    if (!this.speaking) { this.onError("You're in the audience - raise your hand to ask to speak"); return; }
     if (this.state.noMic) { await this.retryMic(); return; }
     const muted = !this.state.muted;
     this.mic?.getAudioTracks().forEach((t) => { t.enabled = !muted && !this.state.deafened; });
@@ -204,8 +235,23 @@ export class Voice {
     try {
       const { participants } = await api<{ participants: Participant[] }>(`/channels/${this.state.channelId}/voice`);
       if (!participants.some((p) => p.uuid === this.me)) { await this.leave(); return; }     // kicked or timed out
+      const wasSpeaking = this.speaking;
       for (const uuid of [...this.peers.keys()]) if (!participants.some((p) => p.uuid === uuid)) this.dropPeer(uuid);
       this.set({ participants });
+      if (this.state.stage) {
+        // the links a stage needs: drop the ones it doesn't (two people in the audience), and as a
+        // speaker, connect to anyone not connected yet (the audience only connects when joining)
+        for (const p of participants) {
+          if (p.uuid === this.me) continue;
+          const need = this.linked(p, participants);
+          if (!need && this.peers.has(p.uuid)) this.dropPeer(p.uuid);
+          else if (need && !this.peers.has(p.uuid) && this.speaking) await this.call(p.uuid);
+        }
+        if (wasSpeaking && !this.speaking) {             // moved to the audience: muted
+          this.mic?.getAudioTracks().forEach((t) => { t.enabled = false; });
+          this.set({ muted: true });
+        }
+      }
     } catch { /* next event */ }
   }
 

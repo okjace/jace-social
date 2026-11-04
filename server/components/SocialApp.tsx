@@ -2,7 +2,9 @@
 // The Jace Social app: friends, direct messages, group chats, servers, voice and bots.
 // The desktop app shows this same page (with a small bridge for Microsoft sign-in,
 // notifications and updates).
-import { Reports } from "./Moderation";
+import { Reports, ReportModal, type ReportTarget } from "./Moderation";
+import { Forum } from "./Forum";
+import { NewChannelModal } from "./NewChannel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api, connectLive, desktop, desktopReady, getToken, inDesktop, joinAddress, setToken, statusLabel, type Channel, type Group,
@@ -46,7 +48,8 @@ type View =
   | { kind: "lookup" };
 type ModalState =
   | { kind: "settings"; tab?: SettingsTab } | { kind: "group" } | { kind: "server" } | { kind: "serverSettings"; tab?: "invites" }
-  | { kind: "channel"; channel: Channel } | { kind: "status" } | { kind: "welcome" } | { kind: "serverWelcome" } | null;
+  | { kind: "channel"; channel: Channel } | { kind: "status" } | { kind: "welcome" } | { kind: "serverWelcome" }
+  | { kind: "newChannel"; parent?: string | null } | { kind: "report"; target: ReportTarget } | null;
 
 export default function SocialApp({ inviteCode }: { inviteCode?: string }) {
   const [token, setTok] = useState<string | null>(null);
@@ -101,7 +104,26 @@ function SignIn({ error, inviteCode }: { error: string; inviteCode?: string }) {
   const [problem, setProblem] = useState("");
   const [device, setDevice] = useState(false);
   const [legal, setLegal] = useState<null | (() => void)>(null);   // the Terms popup, then this sign-in
+  const [jaceOs, setJaceOs] = useState<"trying" | { token: string } | null>(null);   // Jace OS: the computer's Jace account
   useEffect(() => { setApp(inDesktop()); }, []);
+  // Jace OS (desktop app on Linux): sign in with the computer's Jace account, once each time the app
+  // starts (not again right after you sign out). Quiet: if it doesn't work, the normal sign-in is here.
+  useEffect(() => {
+    if (!inDesktop()) return;
+    try { if (sessionStorage.getItem("jace_os_tried")) return; sessionStorage.setItem("jace_os_tried", "1"); } catch { return; }
+    let gone = false;
+    void (async () => {
+      const d = await desktopReady();
+      if (!d?.signInJaceOS || gone) return;
+      setJaceOs("trying");
+      const r = await d.signInJaceOS().catch(() => ({} as { token?: string }));
+      if (gone) return;
+      if (!r.token) { setJaceOs(null); return; }
+      if (hasAgreed()) { setToken(r.token); location.reload(); return; }
+      setJaceOs({ token: r.token });                 // the Terms first (agree: signed in; close: not)
+    })();
+    return () => { gone = true; };
+  }, []);
   const jaceUrl = `/api/v1/auth/jace?return_to=${encodeURIComponent(back)}`;
   /** Shows the Terms and Privacy popup the first time on this device, then signs in. */
   const agreeThen = (go: () => void) => (hasAgreed() ? go() : setLegal(() => go));
@@ -136,6 +158,13 @@ function SignIn({ error, inviteCode }: { error: string; inviteCode?: string }) {
         <p className="muted small" style={{ marginBottom: 0 }}>By signing in you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
         <RecoveryNotice />
         {legal && <LegalDialog onClose={() => setLegal(null)} onAgree={() => { const go = legal; setLegal(null); go(); }} />}
+        {jaceOs === "trying" && <p className="muted small">Signing in with this computer&apos;s Jace account…</p>}
+        {jaceOs && jaceOs !== "trying" && <LegalDialog
+          onClose={() => {                             // not agreed: that session goes again
+            void fetch("/api/v1/auth/signout", { method: "POST", headers: { Authorization: `Bearer ${jaceOs.token}`, "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+            setJaceOs(null);
+          }}
+          onAgree={() => { setToken(jaceOs.token); location.reload(); }} />}
       </div>
     </div>
   );
@@ -348,7 +377,8 @@ function Main({ me, setMe, signOut, inviteCode }: {
       } else if (event === "presence") {
         if (!presenceTimer) presenceTimer = setTimeout(() => { presenceTimer = null; void loadFriends(); }, 1500);
       } else if (event === "channel") {
-        const open = (v.kind === "group" && v.id === p.channel_id) || (v.kind === "server" && v.channel === p.channel_id);
+        const open = (v.kind === "group" && v.id === p.channel_id)
+          || (v.kind === "server" && (v.channel === p.channel_id || (!!p.forum_id && v.channel === p.forum_id)));   // (forum posts: lib/forums.ts)
         const fresh = !p.edited && !p.deleted && !p.reacted && p.name && p.from !== me.uuid;   // a new message from someone else
         const muteKey = [p.channel_id, p.server_id].filter(Boolean);
         if (fresh) messageSound({ inOpenChat: open, important: !!p.mentioned || !p.server_id, muteKey });
@@ -480,7 +510,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
   }, [detail]);
 
   const channelButton = (c: Channel) => {
-    const isVoice = c.kind === "voice";
+    const isVoice = c.kind === "voice" || c.kind === "stage";
     const users = isVoice ? (room.channelId === c.id ? room.participants.map((p) => ({ uuid: p.uuid, muted: p.muted, deafened: p.deafened, streaming: p.streaming }))
       : (detail?.voice ?? []).filter((v) => v.channel_id === c.id)) : [];
     const mutedChan = muted.includes(c.id);
@@ -493,7 +523,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
             void loadDetail(detail!.server.id);
           }}
           onContextMenu={(e) => { e.preventDefault(); void toggleMute(c.id); err(mutedChan ? `Unmuted ${c.name}` : `Muted ${c.name}`); }}>
-          <span className="hash">{isVoice ? "🔊" : c.kind === "announcement" ? "📣" : "#"}</span>
+          <span className="hash">{channelIcon(c.kind)}</span>
           <span className="name">{c.name}</span>
           {!!c.unread && !mutedChan && view.kind === "server" && view.channel !== c.id && <span className="badge">{c.unread}</span>}
           {canManageChannels && <button className="icon-btn hover-only" title="Channel settings" onClick={(e) => { e.stopPropagation(); setModal({ kind: "channel", channel: c }); }}>⚙</button>}
@@ -543,13 +573,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
               <button onClick={() => { setMenu(null); setModal({ kind: "serverSettings" }); }}>⚙ Server settings</button>
               {(detail.server.rules || detail.server.welcome?.message || detail.server.welcome?.channels?.length || detail.server.onboarding?.length) ?
                 <button onClick={() => { setMenu(null); setModal({ kind: "serverWelcome" }); }}>📜 Rules &amp; welcome</button> : null}
-              {canManageChannels && <button onClick={async () => {
-                setMenu(null);
-                const name = prompt("New channel name");
-                if (!name) return;
-                const kind = confirm("Make it a voice channel? (OK = voice, Cancel = text)") ? "voice" : "text";
-                try { await api(`/servers/${detail.server.id}/channels`, { body: { name, kind } }); await loadDetail(detail.server.id); } catch (e) { err((e as Error).message); }
-              }}>＃ Create channel</button>}
+              {canManageChannels && <button onClick={() => { setMenu(null); setModal({ kind: "newChannel" }); }}>＃ Create channel</button>}
               {canManageChannels && <button onClick={async () => {
                 setMenu(null);
                 const name = prompt("New category name");
@@ -557,6 +581,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
                 try { await api(`/servers/${detail.server.id}/channels`, { body: { name, kind: "category" } }); await loadDetail(detail.server.id); } catch (e) { err((e as Error).message); }
               }}>📁 Create category</button>}
               <button onClick={() => { setMenu(null); void toggleMute(detail.server.id); }}>{muted.includes(detail.server.id) ? "🔔 Unmute server" : "🔕 Mute server"}</button>
+              {!detail.owner && <button onClick={() => { setMenu(null); setModal({ kind: "report", target: { kind: "server", server_id: detail.server.id, name: detail.server.name } }); }}>🚩 Report server</button>}
               {settings.developer && <button onClick={() => { setMenu(null); void navigator.clipboard?.writeText(detail.server.id); }}># Copy server ID</button>}
               {!detail.owner && <button style={{ color: "var(--red)" }} onClick={async () => {
                 setMenu(null);
@@ -573,12 +598,9 @@ function Main({ me, setMe, signOut, inviteCode }: {
                   <div className="side-label category" onClick={() => toggleCategory(cat.id)}>
                     <span>{collapsed.includes(cat.id) ? "›" : "⌄"} {cat.name}</span>
                     <span>
-                      {canManageChannels && <button className="icon-btn hover-only" title="Create a channel here" onClick={async (e) => {
+                      {canManageChannels && <button className="icon-btn hover-only" title="Create a channel here" onClick={(e) => {
                         e.stopPropagation();
-                        const name = prompt(`New channel in ${cat.name}`);
-                        if (!name) return;
-                        const kind = /voice/i.test(cat.name) ? "voice" : "text";
-                        try { await api(`/servers/${detail.server.id}/channels`, { body: { name, kind, parent_id: cat.id } }); await loadDetail(detail.server.id); } catch (er) { err((er as Error).message); }
+                        setModal({ kind: "newChannel", parent: cat.id });
                       }}>＋</button>}
                       {canManageChannels && <button className="icon-btn hover-only" title="Category settings" onClick={(e) => { e.stopPropagation(); setModal({ kind: "channel", channel: cat }); }}>⚙</button>}
                     </span>
@@ -729,6 +751,7 @@ function Main({ me, setMe, signOut, inviteCode }: {
             <button className={`btn small${room.channelId === group.id ? " primary" : ""}`} onClick={() => room.channelId === group.id ? void voice.leave() : void voice.join(me.uuid, group.id, null, group.name)}>
               {room.channelId === group.id ? "Leave call" : groupCall[group.id] ? `📞 Join call (${groupCall[group.id]})` : "📞 Start a call"}</button>
             <button className="icon-btn" title="Pinned messages" onClick={() => setPins(!pins)}>📌</button>
+            <button className="icon-btn" title="Report this group chat" onClick={() => setModal({ kind: "report", target: { kind: "group", channel_id: group.id, name: group.name } })}>🚩</button>
             <GroupMenu group={group} me={me} friends={friends.friends} onError={err} onChanged={loadGroups}
               onLeft={() => { setView({ kind: "home" }); void loadGroups(); }} />
           </div>
@@ -739,24 +762,30 @@ function Main({ me, setMe, signOut, inviteCode }: {
             reloadKey={reload} onOpenProfile={setProfile} onError={err} placeholder={`Message ${group.name}`} settings={settings}
             typing={typingIn(`ch:${group.id}`)} showPins={pins} onClosePins={() => setPins(false)} />
         </>}
-        {view.kind === "server" && channel && detail && channel.kind === "voice" && (
+        {view.kind === "server" && channel && detail && (channel.kind === "voice" || channel.kind === "stage") && (
           <>
             <div className="main-head">
               <button className="icon-btn mobile-only" onClick={() => setMobileMain(false)}>←</button>
-              <span className="hash">🔊</span><span className="title">{channel.name}</span><span className="spacer" />
+              <span className="hash">{channelIcon(channel.kind)}</span><span className="title">{channel.name}</span>
+              {channel.kind === "stage" && channel.topic ? <span className="topic">{channel.topic}</span> : <span className="spacer" />}
             </div>
             <VoiceRoom voice={voice} state={room} channelId={channel.id} channelName={channel.name} people={people} me={me}
-              canJoin={has(channel.perms ?? 0, P.CONNECT)} onJoin={() => joinVoice(channel)} />
+              canJoin={has(channel.perms ?? 0, P.CONNECT)} onJoin={() => joinVoice(channel)} stage={channel.kind === "stage"} topic={channel.topic} />
           </>
         )}
-        {view.kind === "server" && channel && detail && channel.kind !== "voice" && <>
+        {view.kind === "server" && channel && detail && (channel.kind === "forum" || channel.kind === "media") && (
+          <Forum forumId={channel.id} me={me} people={people} roles={detail.roles} settings={settings} reloadKey={reload}
+            onOpenProfile={setProfile} onError={err} back={() => setMobileMain(false)} />
+        )}
+        {view.kind === "server" && channel && detail && !["voice", "stage", "forum", "media"].includes(channel.kind ?? "text") && <>
           <div className="main-head">
             <button className="icon-btn mobile-only" onClick={() => setMobileMain(false)}>←</button>
-            <span className="hash">{channel.kind === "announcement" ? "📣" : "#"}</span><span className="title">{channel.name}</span>
+            <span className="hash">{channelIcon(channel.kind)}</span><span className="title">{channel.name}</span>
             {channel.topic ? <span className="topic">{channel.topic}</span> : <span className="spacer" />}
             {!!channel.slowmode && <span className="muted small" title="Slowmode">🐢 {channel.slowmode}s</span>}
             <button className="icon-btn" title="Pinned messages" onClick={() => setPins(!pins)}>📌</button>
             <button className={`icon-btn${showMembers ? " on" : ""}`} title="Members" onClick={() => setShowMembers(!showMembers)}>👥</button>
+            <button className="icon-btn" title="Report this channel" onClick={() => setModal({ kind: "report", target: { kind: "channel", channel_id: channel.id, name: channel.name } })}>🚩</button>
           </div>
           <Chat target={{ kind: "channel", id: channel.id, name: channel.name, isServer: true, slowmode: channel.slowmode, announcement: channel.kind === "announcement" }}
             me={me} people={people} roles={detail.roles} perms={channel.perms} reloadKey={reload} onOpenProfile={setProfile} onError={err}
@@ -788,6 +817,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
       {modal?.kind === "serverSettings" && detail && <ServerSettings detail={detail} me={me} startTab={modal.tab} onClose={() => setModal(null)} onError={err}
         onChanged={() => { void loadDetail(detail.server.id); void loadServers(); }}
         onLeft={() => { setView({ kind: "home" }); setDetail(null); void loadServers(); }} />}
+      {modal?.kind === "newChannel" && detail && <NewChannelModal serverId={detail.server.id} parent={modal.parent}
+        categories={detail.channels.filter((c) => c.kind === "category")} onError={err}
+        onClose={() => setModal(null)} onDone={() => { setModal(null); void loadDetail(detail.server.id); }} />}
+      {modal?.kind === "report" && <ReportModal target={modal.target} onClose={() => setModal(null)} onError={err} />}
       {modal?.kind === "channel" && detail && <ChannelSettings detail={detail} channel={detail.channels.find((c) => c.id === modal.channel.id) ?? modal.channel}
         onClose={() => setModal(null)} onError={err} onChanged={() => void loadDetail(detail.server.id)} />}
       {view.kind === "server" && detail && (modal?.kind === "serverWelcome" || (!detail.onboarded && !modal)) && (
@@ -1024,3 +1057,8 @@ function FriendsHome({ data, reload, onError, onOpen, onMessage, onCall, back }:
   </>;
 }
 
+
+/** The icon in front of a channel's name. */
+function channelIcon(kind?: Channel["kind"]) {
+  return ({ voice: "🔊", stage: "🎙️", forum: "💬", media: "🖼️", announcement: "📣" } as Record<string, string>)[kind ?? "text"] ?? "#";
+}

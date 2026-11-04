@@ -28,6 +28,14 @@ GET ?return_to=/app  -> redirects the browser to Jace (web app)
 POST {}             -> {url, state, poll_key}: apps open url in a browser, then poll /auth/jace/poll
 methods: GET methods: POST 
 
+## /api/v1/auth/jace/os
+Jace OS: sign in with the computer's Jace account. The desktop app gets a Jace access token for
+Jace Social from `jace-account --token-for <client_id>` (Jace's token exchange) and sends it here.
+It's checked with Jace's /api/oauth/introspect: it must be active and issued to Jace Social's client id.
+GET                    -> {client_id, scope}: what to ask jace-account for
+POST {access_token}    -> the same session as signing in with Jace {token, expires_at, uuid, realtime_url, realtime_key}
+methods: GET methods: POST 
+
 ## /api/v1/auth/minecraft/poll
 POST {ticket}: {pending: true} until the player has entered the code at microsoft.com/link,
 then signs them in like /auth/finish -> {token, uuid, inbox, realtime}

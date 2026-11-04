@@ -1,8 +1,7 @@
 "use client";
 // One conversation: a direct message, a group chat or a server channel.
-import { createClient } from "@supabase/supabase-js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { api, type Attachment, type Command, type Me, type Message, type Person, type ReplyPreview, type Role, type Settings } from "@/lib/client";
+import { api, uploadAttachment, type Attachment, type Command, type Me, type Message, type Person, type ReplyPreview, type Role, type Settings } from "@/lib/client";
 import { has, P } from "@/lib/permbits";
 import { EmojiPicker } from "./EmojiPicker";
 import { MessageRow, nameStyle } from "./Message";
@@ -53,7 +52,8 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
   const stick = useRef(true);
   const lastTyping = useRef(0);
   const key = target.kind === "dm" ? `dm:${target.uuid}` : `ch:${target.id}`;
-  const can = perms ?? DM_PERMS;
+  const [servedPerms, setServedPerms] = useState<number | null>(null);   // what the server says you can do here
+  const can = perms ?? servedPerms ?? DM_PERMS;
   const isChannel = target.kind === "channel";
   const scope = isChannel ? "c" : "d";
 
@@ -66,8 +66,9 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
         setMore(d.messages.length === 50);
         if (!before) await api("/messages/read", { body: { with: target.uuid } }).catch(() => {});
       } else {
-        const d = await api<{ messages: Message[]; people: Record<string, Person>; replies?: Record<number, ReplyPreview> }>(
+        const d = await api<{ messages: Message[]; people: Record<string, Person>; replies?: Record<number, ReplyPreview>; perms?: number }>(
           `/channels/${target.id}/messages${before ? `?before=${before}` : ""}`);
+        if (typeof d.perms === "number") setServedPerms(d.perms);
         setMsgs((old) => (before ? [...d.messages, ...old] : d.messages));
         setSenders((s) => ({ ...s, ...d.people }));
         setReplies((r) => ({ ...r, ...(d.replies ?? {}) }));
@@ -126,21 +127,7 @@ export function Chat({ target, me, people, roles = [], perms, reloadKey, onOpenP
       const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
       setUploads((u) => [...u, { id, file, progress: "uploading", preview }]);
       try {
-        const type = file.type || "application/octet-stream";
-        // the server picks the storage service (lib/storage.ts): Supabase, or a signed URL on R2 / B2
-        const s = await api<{ provider: string; url: string; upload_url: string; path?: string; token?: string; headers?: Record<string, string> }>(
-          "/uploads", { body: { name: file.name, type, size: file.size } });
-        if (s.provider === "supabase") {
-          const sb = createClient(me.realtime.url, me.realtime.key, { auth: { persistSession: false } });
-          const { error } = await sb.storage.from("attachments").uploadToSignedUrl(s.path!, s.token!, file, { contentType: type });
-          if (error) throw new Error(error.message);
-        } else {
-          const r = await fetch(s.upload_url, { method: "PUT", headers: s.headers ?? { "Content-Type": type }, body: file });
-          if (!r.ok) throw new Error(`storage answered ${r.status}`);
-        }
-        let dims: { width?: number; height?: number } = {};
-        if (preview) dims = await new Promise((ok) => { const img = new Image(); img.onload = () => ok({ width: img.naturalWidth, height: img.naturalHeight }); img.onerror = () => ok({}); img.src = preview; });
-        const att: Attachment = { url: s.url, name: file.name, type: file.type || "application/octet-stream", size: file.size, ...dims };
+        const att = await uploadAttachment(me.realtime, file);       // (lib/client.ts: the server picks where)
         setUploads((u) => u.map((x) => (x.id === id ? { ...x, progress: "done", att } : x)));
       } catch (e) {
         onError(`Couldn't upload ${file.name}: ${(e as Error).message}`);

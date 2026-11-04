@@ -116,7 +116,7 @@ export type Role = {
   permissions: number; hoist: boolean; mentionable: boolean; is_default: boolean;
 };
 export type Override = { channel_id: string; target_type: "role" | "member"; target_id: string; allow: number; deny: number };
-export type VoiceState = { channel_id: string; uuid: string; muted: boolean; deafened: boolean; streaming: boolean };
+export type VoiceState = { channel_id: string; uuid: string; muted: boolean; deafened: boolean; streaming: boolean; speaker?: boolean };
 export type Attachment = { url: string; name: string; type: string; size: number; width?: number; height?: number; no_preview?: boolean };
 export type Embed = { url: string; title?: string; description?: string; image?: string; site?: string; color?: string; type: "link" | "image" | "video"; video?: string };
 export type Reaction = { emoji: string; count: number; me: boolean };
@@ -127,9 +127,11 @@ export type Group = { id: string; name: string; icon_url: string | null; owner: 
 export type ServerItem = { id: string; name: string; icon_url: string | null; role: string; unread: number };
 export type Channel = {
   id: string; server_id: string | null; name: string; topic: string | null; unread?: number; position: number;
-  kind?: "text" | "voice" | "announcement" | "category"; parent_id?: string | null; slowmode?: number; user_limit?: number;
+  kind?: "text" | "voice" | "announcement" | "category" | "forum" | "media" | "stage"; parent_id?: string | null; slowmode?: number; user_limit?: number;
   perms?: number;
+  available_tags?: ForumTag[];                      // forums and media channels (lib/forums.ts)
 };
+export type ForumTag = { id: string; name: string; emoji?: string | null };
 export type ServerInfo = {
   id: string; name: string; icon_url: string | null; description: string | null; owner: string; invite_code: string | null;
   vanity: string | null; banner_url: string | null; accent_color: string | null; rules: string | null;
@@ -220,6 +222,9 @@ export type UpdateCheck = { current: string; latest?: string; newer?: boolean; e
 /** The desktop app adds this bridge (see app/ in the repo); the web version doesn't have it. */
 export type DesktopBridge = {
   signInMinecraft(): Promise<{ token?: string; error?: string }>;
+  /** Jace OS: sign in with the computer's Jace account -> a session, or {} (not there / turned off / didn't work). */
+  signInJaceOS?(): Promise<{ token?: string }>;
+  setJaceOsSignIn?(on: boolean): void;
   linkMinecraft(token: string): Promise<{ ok?: boolean; error?: string }>;
   notify(title: string, body: string): void;
   setUnread(count: number): void;
@@ -229,7 +234,8 @@ export type DesktopBridge = {
   checkForUpdate?(): Promise<UpdateCheck>;
   /** Open on sign-in and the overlay shortcut (1.0.5+). */
   getDesktopSettings?(): Promise<{ startup: boolean | null; overlayShortcut: string; overlayError: string | null; shortcutsUnsupported: string | null;
-    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean }>;
+    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean;
+    jaceOsSignIn?: boolean | null }>;              // Jace OS: sign in with the computer's Jace account (null: not Jace OS)
   setStartup?(on: boolean): Promise<{ ok?: boolean; error?: string }>;
   setOverlayShortcut?(combo: string): Promise<{ ok?: boolean; error?: string; note?: string | null }>;
   /** Wayland: open the desktop's own screen for changing the overlay shortcut (1.0.11+). */
@@ -279,4 +285,26 @@ export function desktopReady(): Promise<DesktopBridge | null> {
     window.addEventListener("jacedesktop", done, { once: true });
     setTimeout(done, 5000);
   });
+}
+
+/** Upload a file for a message straight to storage (the server picks where: lib/storage.ts) -> the attachment. */
+export async function uploadAttachment(realtime: { url: string; key: string }, file: File): Promise<Attachment> {
+  const type = file.type || "application/octet-stream";
+  const s = await api<{ provider: string; url: string; upload_url: string; path?: string; token?: string; headers?: Record<string, string> }>(
+    "/uploads", { body: { name: file.name, type, size: file.size } });
+  if (s.provider === "supabase") {
+    const sb = createClient(realtime.url, realtime.key, { auth: { persistSession: false } });
+    const { error } = await sb.storage.from("attachments").uploadToSignedUrl(s.path!, s.token!, file, { contentType: type });
+    if (error) throw new Error(error.message);
+  } else {
+    const r = await fetch(s.upload_url, { method: "PUT", headers: s.headers ?? { "Content-Type": type }, body: file });
+    if (!r.ok) throw new Error(`storage answered ${r.status}`);
+  }
+  let dims: { width?: number; height?: number } = {};
+  if (type.startsWith("image/")) {
+    const url = URL.createObjectURL(file);
+    dims = await new Promise((ok) => { const img = new Image(); img.onload = () => ok({ width: img.naturalWidth, height: img.naturalHeight }); img.onerror = () => ok({}); img.src = url; });
+    URL.revokeObjectURL(url);
+  }
+  return { url: s.url, name: file.name, type, size: file.size, ...dims };
 }
