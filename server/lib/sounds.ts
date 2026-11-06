@@ -128,23 +128,43 @@ export function startSound(choice: string | null | undefined, kind: SoundKind): 
   if (pick === "builtin:none") return { stop() {} };
   let stopped = false;
   let backup: { stop: () => void } | null = null;
+  let playing: string | null = null;                 // the clip it's looping (for the watchdog below)
+  let lastTime = -1, stuck = 0;
   const el = ringEl ?? new Audio();
   const go = (src: string | null) => {
     if (stopped) return;
     if (!src) { backup = webAudio(builtinOf(pick, kind), true); return; }
+    playing = src;
     el.src = src; el.loop = true; el.volume = 0.9; el.muted = false;
     void el.play().catch((e) => {                  // blocked or a broken file: the built-in one, the other way
       if (stopped || interrupted(e)) return;
       blocked(e);
+      playing = null;
       backup = webAudio(builtinOf(/^https?:/.test(pick) ? DEFAULT_SOUND[kind] : pick, kind), true);
     });
   };
+  // Keep it going until stop(). Opening the microphone for the call can interrupt it: phones pause
+  // playing sound, and Bluetooth headphones switch to their call mode (another audio device), which
+  // stops Chromium's player - the calling sound cut off right after it started. Every second: paused
+  // or stuck (its time not moving) -> start it again.
+  const watchdog = setInterval(() => {
+    if (stopped || !playing || ringing !== me) return;
+    if (el.paused || el.ended) { void el.play().catch(() => {}); lastTime = -1; stuck = 0; return; }
+    stuck = el.currentTime === lastTime ? stuck + 1 : 0;
+    lastTime = el.currentTime;
+    if (stuck >= 2) {                                // playing on a device that went away: start over
+      stuck = 0;
+      el.src = playing; el.loop = true;
+      void el.play().catch(() => {});
+    }
+  }, 1000);
   if (/^https?:\/\//.test(pick)) go(pick);
   else void builtinClip(builtinOf(pick, kind), true).then(go);
   const me = {
     stop() {
       if (stopped) return;
       stopped = true;
+      clearInterval(watchdog);
       if (ringing === me) { ringing = null; el.pause(); el.loop = false; }
       backup?.stop();
     },
