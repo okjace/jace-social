@@ -2,14 +2,14 @@
 
 Jace OS ships `jace-account`: `--json` says whether the computer is signed in to Jace, and
 `--token-for <client_id>` trades the computer's Jace token for one issued to another official Jace
-app (Jace's OAuth token exchange). When the app starts on Linux, isn't signed in, and the setting is
-on (Settings -> Desktop app; on unless turned off), the sign-in page asks for this (the bridge's
-signInJaceOS): we get a Jace token for Jace Social, the server checks it with Jace
+app (Jace's OAuth token exchange). Each time the sign-in page shows on Jace OS (and the setting is on:
+Settings -> Desktop app), it asks "Sign in as @<you>?" with the computer's account (account()); on
+yes (sign_in): we get a Jace token for Jace Social, the server checks it with Jace
 (server/app/api/v1/auth/jace/os) and answers with a normal Jace Social session.
 
-Anything that doesn't work (not Jace OS, not signed in there, Jace or the server unreachable, an
-old Jace) just returns {} and the normal sign-in shows - never an error. Tokens are never logged.
-Standard library only.
+Not Jace OS, or not signed in there: no question, just the normal sign-in. After you said yes,
+something failing comes back as {"error": "..."} saying which step. Tokens are never logged or
+shown. Standard library only.
 """
 from __future__ import annotations
 
@@ -55,30 +55,51 @@ def _tool(*args: str, timeout: float) -> dict:
 
 
 def _api(base: str, method: str, path: str, body: dict | None = None) -> dict:
+    """-> the JSON answer; {"error": ...} (the server's own words when it gave some) if it failed."""
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(base + path, data=data, method=method,
                                  headers={"Content-Type": "application/json", "User-Agent": "JaceSocialDesktop"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            said = json.loads(e.read() or b"{}").get("error")
+        except (ValueError, OSError):
+            said = None
+        return {"error": str(said) if said else f"Jace Social answered {e.code}"}
     except (urllib.error.URLError, OSError, ValueError):
+        return {"error": "Can't reach Jace Social - check your internet connection"}
+
+
+def account() -> dict:
+    """The computer's Jace account: {"username", "name", "picture"}, or {} (not Jace OS / signed out)."""
+    if not available():
         return {}
+    acct = _tool("--json", timeout=10)
+    user = acct.get("user") if acct.get("signed_in") else None
+    if not isinstance(user, dict) or not user.get("username"):
+        return {}
+    return {"username": str(user["username"]), "name": str(user.get("display_name") or user.get("name") or user["username"]),
+            "picture": user.get("picture") if isinstance(user.get("picture"), str) else None}
 
 
 def sign_in(base: str) -> dict:
     """The computer's Jace account -> {"token": <Jace Social session>} (with the rest of the
-    session), or {} when that can't be done (then the normal sign-in shows)."""
+    session), or {"error": what went wrong} (never with a token in it)."""
     if not available():
-        return {}
+        return {"error": "This isn't Jace OS (there's no jace-account here)"}
     if not _tool("--json", timeout=10).get("signed_in"):
-        return {}
+        return {"error": "This computer isn't signed in to Jace"}
     info = _api(base, "GET", "/api/v1/auth/jace/os")
     client_id = info.get("client_id")
     if not isinstance(client_id, str) or not client_id:
-        return {}
+        return {"error": info.get("error") or "Jace Social can't take Jace OS sign-ins right now"}
     got = _tool("--token-for", client_id, "--scope", str(info.get("scope") or "profile messages"), timeout=30)
     access = got.get("access_token")
     if not isinstance(access, str) or not access:
-        return {}
+        return {"error": "Jace didn't give this computer a sign-in for Jace Social - try Sign in with Jace instead"}
     session = _api(base, "POST", "/api/v1/auth/jace/os", {"access_token": access})
-    return session if isinstance(session.get("token"), str) else {}
+    if isinstance(session.get("token"), str):
+        return session
+    return {"error": session.get("error") or "Jace Social didn't accept the sign-in"}

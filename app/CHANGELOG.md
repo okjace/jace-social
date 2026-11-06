@@ -1,5 +1,8 @@
 # Jace Social desktop app changelog
 
+## 1.0.17
+- **Jace OS: "Sign in as @you?"** Each time the sign-in screen shows, Jace Social asks whether to sign in with the Jace account your computer is signed in to - its name and picture, with Sign in and Not now. Before, it tried by itself once when the app started, and when that didn't work you never saw why. Now, if signing in doesn't work, the popup says what went wrong. Turn the question off in Settings → Desktop app.
+
 ## 1.0.16
 - **Jace OS: signed in with your computer's Jace account.** When Jace Social starts on Jace OS and you aren't signed in, it signs you in with the Jace account the computer is signed in to - no browser, no code. If you haven't agreed to the Terms on this computer yet, they show first. If it can't (not Jace OS, the computer isn't signed in to Jace, or no internet), you just see the normal sign-in. It doesn't sign you straight back in after you sign out; it tries again the next time the app starts. Turn it off in Settings → Desktop app.
 

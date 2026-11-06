@@ -222,8 +222,10 @@ export type UpdateCheck = { current: string; latest?: string; newer?: boolean; e
 /** The desktop app adds this bridge (see app/ in the repo); the web version doesn't have it. */
 export type DesktopBridge = {
   signInMinecraft(): Promise<{ token?: string; error?: string }>;
-  /** Jace OS: sign in with the computer's Jace account -> a session, or {} (not there / turned off / didn't work). */
-  signInJaceOS?(): Promise<{ token?: string }>;
+  /** Jace OS: sign in with the computer's Jace account -> a session, or {error} (1.0.17+; 1.0.16 answered {}). */
+  signInJaceOS?(): Promise<{ token?: string; error?: string }>;
+  /** Jace OS: the computer's Jace account, for "Sign in as @you?" -> {username, name, picture} or {} (1.0.17+). */
+  jaceOsAccount?(): Promise<{ username?: string; name?: string; picture?: string | null }>;
   setJaceOsSignIn?(on: boolean): void;
   linkMinecraft(token: string): Promise<{ ok?: boolean; error?: string }>;
   notify(title: string, body: string): void;

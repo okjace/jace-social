@@ -43,6 +43,7 @@ BRIDGE_JS = """
       version: b.version,
       signInMinecraft: function () { return call("signInMinecraft"); },
       signInJaceOS: function () { return call("signInJaceOS"); },
+      jaceOsAccount: function () { return call("jaceOsAccount"); },
       setJaceOsSignIn: function (on) { b.setJaceOsSignIn(!!on); },
       linkMinecraft: function (token) { return call("linkMinecraft", token); },
       notify: function (title, body) { b.notify(String(title), String(body)); },
@@ -203,21 +204,32 @@ class Bridge(QObject):
     def signInMinecraft(self, rid: int):
         self._microsoft(rid, lambda acc: minecraft.sign_in(BASE, acc))
 
+    def _off_thread(self, rid: int, work):
+        """Run work() off the UI thread and reply with what it returns ({} if it broke)."""
+        def run():
+            try:
+                out = work()
+            except Exception:  # noqa: BLE001 - always answer the page (and never log a token)
+                out = {"error": "Something went wrong signing in with this computer's Jace account"}
+            self.reply.emit(rid, json.dumps(out))
+        threading.Thread(target=run, daemon=True).start()
+
     @Slot(int)
-    def signInJaceOS(self, rid: int):
-        """Jace OS: sign in with the computer's Jace account (jaceos.py) -> {token, ...}, or {} quietly
-        (not Jace OS, turned off, or it didn't work: the page shows the normal sign-in)."""
+    def jaceOsAccount(self, rid: int):
+        """Jace OS: the computer's Jace account for the sign-in page's "Sign in as @you?" -> {username, name,
+        picture}, or {} (not Jace OS, signed out there, or turned off in Settings -> Desktop app)."""
         if not pref("jace_os_signin", True) or not jaceos.available():
             self.reply.emit(rid, "{}")
             return
+        self._off_thread(rid, jaceos.account)
 
-        def work():
-            try:
-                out = jaceos.sign_in(BASE)
-            except Exception:  # noqa: BLE001 - quietly back to the normal sign-in (and never log a token)
-                out = {}
-            self.reply.emit(rid, json.dumps(out))
-        threading.Thread(target=work, daemon=True).start()
+    @Slot(int)
+    def signInJaceOS(self, rid: int):
+        """Jace OS: sign in with the computer's Jace account (jaceos.py) -> {token, ...} or {error}."""
+        if not jaceos.available():
+            self.reply.emit(rid, json.dumps({"error": "This isn't Jace OS"}))
+            return
+        self._off_thread(rid, lambda: jaceos.sign_in(BASE))
 
     @Slot(bool)
     def setJaceOsSignIn(self, on: bool):
@@ -251,7 +263,7 @@ class Bridge(QObject):
             # Wayland: the desktop owns the keys (its dialog picks them, its settings change them)
             "overlayManagedByDesktop": hotkeys.on_wayland() and not desktopkeys.kind(),
             "shortcutsUnsupported": hotkeys.unsupported_reason(),
-            # Jace OS: sign in with the computer's Jace account (null: not Jace OS)
+            # Jace OS: offer to sign in with the computer's Jace account (null: not Jace OS)
             "jaceOsSignIn": pref("jace_os_signin", True) is not False if jaceos.available() else None,
         }))
 

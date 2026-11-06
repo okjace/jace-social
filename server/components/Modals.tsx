@@ -682,7 +682,7 @@ function DesktopOptions({ d }: { d: DesktopBridge }) {
       {s.jaceOsSignIn !== null && s.jaceOsSignIn !== undefined && d.setJaceOsSignIn && (
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={s.jaceOsSignIn} onChange={(e) => { d.setJaceOsSignIn!(e.target.checked); setS({ ...s, jaceOsSignIn: e.target.checked }); }} />
-          Sign in automatically with this computer&apos;s Jace account (Jace OS)
+          On the sign-in screen, offer to sign in with this computer&apos;s Jace account (Jace OS)
         </label>
       )}
       <span>Game overlay shortcut</span>
