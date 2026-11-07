@@ -334,6 +334,13 @@ class ScreenPicker(QDialog):
                 self.list.addItem(item)
         if self.list.count():
             self.list.setCurrentRow(0)
+        wayland = sys.platform.startswith("linux") and bool(os.environ.get("WAYLAND_DISPLAY"))
+        if wayland and self.list.count():
+            lay.addWidget(QLabel("Your desktop asks next which screen or window to share."))
+        elif not self.list.count():
+            lay.addWidget(QLabel("No screens or windows to share were found." + (
+                "\nOn Wayland this needs xdg-desktop-portal with your desktop's portal (e.g. -wlr, -kde, -gnome) and PipeWire."
+                if wayland else "")))
         self.list.itemDoubleClicked.connect(lambda _: self.accept())
         lay.addWidget(self.list, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
@@ -948,6 +955,10 @@ def setup_page_drawing() -> bool:
     # calls that came in meanwhile made no sound
     add_chromium_flags("--disable-background-timer-throttling", "--disable-renderer-backgrounding",
                        "--disable-backgrounding-occluded-windows")
+    if sys.platform.startswith("linux") and (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("XDG_SESSION_TYPE") == "wayland"):
+        # screen sharing on Wayland goes through the desktop's screen-sharing portal (PipeWire): without
+        # this, Chromium finds no screens or windows and "Share your screen" listed nothing
+        add_chromium_flags("--enable-features=WebRTCPipeWireCapturer")
     if running_under_wine():
         # Chromium's GPU compositor crashes on Wine without a real GPU driver (seen with
         # Soda), so draw the web page in software there; real Windows keeps the GPU

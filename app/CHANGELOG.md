@@ -1,5 +1,8 @@
 # Jace Social desktop app changelog
 
+## 1.0.19
+- **Fixed: "Share your screen" listed nothing on Linux with Wayland** (Jace OS, GNOME, KDE, Hyprland, niri, Sway...). Screen sharing now goes through your desktop's own screen-sharing window, which asks which screen or window to share. If sharing still can't work, the window says why instead of staying empty.
+
 ## 1.0.18
 - **Fixed: Jace OS sign-in always said "Can't reach Jace Social".** The app couldn't find Jace OS's security certificates, so it couldn't check it was really talking to Jace Social. Now it uses its own certificates, plus the system's.
 - **Fixed: signing in with Minecraft sometimes said "Can't reach Jace Social"** after the app had been open a while. A connection the server had already closed got reused. Now the app tries again on a new connection.
