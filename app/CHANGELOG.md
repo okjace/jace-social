@@ -1,5 +1,8 @@
 # Jace Social desktop app changelog
 
+## 1.0.20
+- **Fixed: "Share your screen" still said no screens or windows were found.** The list of screens and windows fills in a moment after the window opens, and the window only looked once, right away. Now it updates as they come in (and as windows open and close), and only says nothing was found after a few seconds.
+
 ## 1.0.19
 - **Fixed: "Share your screen" listed nothing on Linux with Wayland** (Jace OS, GNOME, KDE, Hyprland, niri, Sway...). Screen sharing now goes through your desktop's own screen-sharing window, which asks which screen or window to share. If sharing still can't work, the window says why instead of staying empty.
 

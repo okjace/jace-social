@@ -326,21 +326,17 @@ class ScreenPicker(QDialog):
         lay = QVBoxLayout(self)
         lay.addWidget(QLabel("Choose what your friends will see:"))
         self.list = QListWidget()
-        for kind, model, label in (("screen", request.screensModel(), "🖥️"), ("window", request.windowsModel(), "🪟")):
-            for row in range(model.rowCount()):
-                name = model.data(model.index(row, 0), _Qt.ItemDataRole.DisplayRole) or f"{kind.title()} {row + 1}"
-                item = QListWidgetItem(f"{label}  {name}")
-                item.setData(_Qt.ItemDataRole.UserRole, (kind, row))
-                self.list.addItem(item)
-        if self.list.count():
-            self.list.setCurrentRow(0)
-        wayland = sys.platform.startswith("linux") and bool(os.environ.get("WAYLAND_DISPLAY"))
-        if wayland and self.list.count():
-            lay.addWidget(QLabel("Your desktop asks next which screen or window to share."))
-        elif not self.list.count():
-            lay.addWidget(QLabel("No screens or windows to share were found." + (
-                "\nOn Wayland this needs xdg-desktop-portal with your desktop's portal (e.g. -wlr, -kde, -gnome) and PipeWire."
-                if wayland else "")))
+        self.note = QLabel("Looking for screens and windows…")
+        self.note.setWordWrap(True)
+        lay.addWidget(self.note)
+        self.wayland = sys.platform.startswith("linux") and bool(os.environ.get("WAYLAND_DISPLAY"))
+        # the lists fill in a moment after the request (and change as windows open and close):
+        # read them again whenever they change - reading them once at the start found nothing
+        for model in (self.request.screensModel(), self.request.windowsModel()):
+            for sig in (model.rowsInserted, model.rowsRemoved, model.modelReset, model.dataChanged):
+                sig.connect(lambda *_: self._fill())
+        self._fill()
+        QTimer.singleShot(4000, self._nothing_found)
         self.list.itemDoubleClicked.connect(lambda _: self.accept())
         lay.addWidget(self.list, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
@@ -350,6 +346,34 @@ class ScreenPicker(QDialog):
         buttons.rejected.connect(self.reject)
         lay.addWidget(buttons)
         self.finished.connect(self._finish)
+
+    def _fill(self):
+        from PySide6.QtCore import Qt as _Qt
+        from PySide6.QtWidgets import QListWidgetItem
+        if self.done_:
+            return
+        chosen = self.list.currentItem().data(_Qt.ItemDataRole.UserRole) if self.list.currentItem() else None
+        self.list.clear()
+        for kind, model, label in (("screen", self.request.screensModel(), "🖥️"), ("window", self.request.windowsModel(), "🪟")):
+            for row in range(model.rowCount()):
+                name = model.data(model.index(row, 0), _Qt.ItemDataRole.DisplayRole) or f"{kind.title()} {row + 1}"
+                item = QListWidgetItem(f"{label}  {name}")
+                item.setData(_Qt.ItemDataRole.UserRole, (kind, row))
+                self.list.addItem(item)
+                if (kind, row) == chosen:
+                    self.list.setCurrentItem(item)
+        if self.list.count():
+            if not self.list.currentItem():
+                self.list.setCurrentRow(0)
+            self.note.setText("Your desktop asks next which screen or window to share." if self.wayland else "")
+            self.note.setVisible(self.wayland)
+
+    def _nothing_found(self):
+        if self.done_ or self.list.count():
+            return
+        self.note.setText("No screens or windows to share were found." + (
+            "\nOn Wayland this needs xdg-desktop-portal with your desktop's portal (e.g. -wlr, -kde, -gnome) and PipeWire."
+            if self.wayland else ""))
 
     def _finish(self, result: int):
         from PySide6.QtCore import Qt as _Qt
