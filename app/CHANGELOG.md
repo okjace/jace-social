@@ -1,5 +1,9 @@
 # Jace Social desktop app changelog
 
+## 1.0.18
+- **Fixed: Jace OS sign-in always said "Can't reach Jace Social".** The app couldn't find Jace OS's security certificates, so it couldn't check it was really talking to Jace Social. Now it uses its own certificates, plus the system's.
+- **Fixed: signing in with Minecraft sometimes said "Can't reach Jace Social"** after the app had been open a while. A connection the server had already closed got reused. Now the app tries again on a new connection.
+
 ## 1.0.17
 - **Jace OS: "Sign in as @you?"** Each time the sign-in screen shows, Jace Social asks whether to sign in with the Jace account your computer is signed in to - its name and picture, with Sign in and Not now. Before, it tried by itself once when the app started, and when that didn't work you never saw why. Now, if signing in doesn't work, the popup says what went wrong. Turn the question off in Settings → Desktop app.
 

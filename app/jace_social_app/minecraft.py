@@ -19,6 +19,12 @@ MC = "https://api.minecraftservices.com"
 
 session = requests.Session()
 session.headers["User-Agent"] = "JaceSocial/1.0"
+# A kept-open connection the server closed after a pause fails the next request ("Can't reach..." now
+# and then): try those again on a new connection (only connection failures; nothing was answered yet).
+_retry = requests.adapters.HTTPAdapter(max_retries=requests.adapters.Retry(
+    total=2, connect=2, read=1, status=0, other=0, allowed_methods=None, backoff_factor=0.3, raise_on_status=False))
+session.mount("https://", _retry)
+session.mount("http://", _retry)
 
 
 class AuthError(Exception):
@@ -80,7 +86,11 @@ def minecraft_account(code: str) -> dict:
 def _api(base: str, method: str, path: str, body=None, token: str | None = None) -> dict:
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        r = session.request(method, base + path, json=body, headers=headers, timeout=20)
+        try:
+            r = session.request(method, base + path, json=body, headers=headers, timeout=20)
+        except requests.ConnectionError:
+            # usually a kept-open connection the server had already closed after a pause: once more, on a new one
+            r = session.request(method, base + path, json=body, headers=headers, timeout=20)
     except requests.RequestException as e:
         raise AuthError("Can't reach Jace Social - check your internet connection") from e
     d = r.json() if r.content else {}

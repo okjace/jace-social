@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import sys
 import urllib.error
@@ -54,13 +55,32 @@ def _tool(*args: str, timeout: float) -> dict:
         return {}
 
 
+def _tls() -> ssl.SSLContext:
+    """Certificates to check Jace Social's with: the bundled certifi ones (the bundled OpenSSL looks
+    for the system's in Ubuntu's folder, which Jace OS and other Linuxes don't have), plus the system's."""
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(cafile=certifi.where())
+    except (ImportError, OSError, ssl.SSLError):
+        pass
+    for path in ("/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/cert.pem", "/etc/pki/tls/certs/ca-bundle.crt"):
+        if os.path.isfile(path):
+            try:
+                ctx.load_verify_locations(cafile=path)
+                break
+            except (OSError, ssl.SSLError):
+                pass
+    return ctx
+
+
 def _api(base: str, method: str, path: str, body: dict | None = None) -> dict:
     """-> the JSON answer; {"error": ...} (the server's own words when it gave some) if it failed."""
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(base + path, data=data, method=method,
                                  headers={"Content-Type": "application/json", "User-Agent": "JaceSocialDesktop"})
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with urllib.request.urlopen(req, timeout=20, context=_tls()) as r:
             return json.loads(r.read() or b"{}")
     except urllib.error.HTTPError as e:
         try:
@@ -68,7 +88,11 @@ def _api(base: str, method: str, path: str, body: dict | None = None) -> dict:
         except (ValueError, OSError):
             said = None
         return {"error": str(said) if said else f"Jace Social answered {e.code}"}
-    except (urllib.error.URLError, OSError, ValueError):
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, ssl.SSLError):
+            return {"error": "Couldn't check Jace Social's security certificate"}
+        return {"error": "Can't reach Jace Social - check your internet connection"}
+    except (OSError, ValueError):
         return {"error": "Can't reach Jace Social - check your internet connection"}
 
 
