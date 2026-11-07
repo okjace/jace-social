@@ -109,6 +109,32 @@ export function onOutputsChanged(fn: () => void): () => void {
   return () => { md.removeEventListener("devicechange", changed); if (timer) clearTimeout(timer); };
 }
 
+/**
+ * Start watching for speakers/headphones changing; `wait()` resolves once they've settled. Opening the
+ * microphone makes Bluetooth headphones switch to their call mode: everything playing then goes silent
+ * for a few seconds while they switch (seen with a soundcore Space One on PipeWire). Make it before
+ * opening the microphone, then wait() before starting a sound that should be heard from the start.
+ * No change reported: wait() still takes 1.2 s (the headphones may switch without one; theirs took about 1 s).
+ */
+export function outputsSettle(): { wait: () => Promise<void> } {
+  const md = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+  let last = 0;
+  const on = () => { last = Date.now(); };
+  md?.addEventListener?.("devicechange", on);
+  return {
+    wait: () => new Promise<void>((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        const now = Date.now();
+        const quiet = last ? now - last >= 2500 : now - start >= 1200;
+        if (quiet || now - start >= 5000) { md?.removeEventListener?.("devicechange", on); resolve(); }
+        else setTimeout(check, 100);
+      };
+      check();
+    }),
+  };
+}
+
 /** Play a call's sound again from scratch, so it comes out of the output in use now (see onOutputsChanged). */
 export function reattachAudio(el: HTMLAudioElement) {
   const s = el.srcObject;

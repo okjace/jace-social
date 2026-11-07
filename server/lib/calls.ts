@@ -5,7 +5,7 @@
 // (no trickle), and audio goes straight between players or through the TURN relay.
 import { api } from "./client";
 import { startSound } from "./sounds";
-import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, onMicDead, onOutputsChanged, reattachAudio, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
+import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, onMicDead, onOutputsChanged, outputsSettle, reattachAudio, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
 
 export type CallState = "idle" | "calling" | "ringing" | "in-call";
 export type CallInfo = {
@@ -119,17 +119,21 @@ export class Calls {
     this.callerSide = true;
     const id = this.callId;
     this.set({ ...IDLE, state: "calling", peer: uuid, peerName: name });
-    this.ring = startSound(this.sounds.calling, "calling");
+    // the calling sound starts once the microphone is open and the headphones have settled: opening the
+    // microphone switches Bluetooth headphones to their call mode, which silenced a sound already playing
+    // for a few seconds - the calling sound cut off right after it started
+    const settle = outputsSettle();
     try {
       const pc = await this.newPeer(id);
-      // the microphone just opened: Bluetooth headphones are switching to their call mode, which can leave
-      // the calling sound on their old (now silent) output - in case no device change is reported, once more
-      for (const ms of [2500, 5000]) setTimeout(() => { if (this.callId === id && this.info.state === "calling") this.ring?.restart(); }, ms);
+      void settle.wait().then(() => {
+        if (this.callId === id && this.info.state === "calling" && !this.ring) this.ring = startSound(this.sounds.calling, "calling");
+      });
       const sdp = await describe(pc, await pc.createOffer());
       if (this.callId !== id) return;
       await api("/calls", { body: { to: uuid, call_id: id, kind: "offer", sdp } });
       this.startTimeout();
     } catch (e) {
+      void settle.wait();                            // (stops watching)
       if (this.callId === id) this.end((e as Error).message);
     }
   }
