@@ -5,7 +5,7 @@
 // (no trickle), and audio goes straight between players or through the TURN relay.
 import { api } from "./client";
 import { startSound } from "./sounds";
-import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, onMicDead, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
+import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, onMicDead, onOutputsChanged, reattachAudio, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
 
 export type CallState = "idle" | "calling" | "ringing" | "in-call";
 export type CallInfo = {
@@ -58,7 +58,8 @@ export class Calls {
   private moving = false;          // taking over our call from another device (see takeOver)
   private audio = new Map<string, HTMLAudioElement>();   // their voice, and their screen's sound
   private timeout: ReturnType<typeof setTimeout> | null = null;
-  private ring: { stop: () => void } | null = null;
+  private ring: { stop: () => void; restart: () => void } | null = null;
+  private unOutputs: (() => void) | null = null;
   private listeners = new Set<(i: CallInfo) => void>();
   private relay = false;
   private sounds: { ringtone?: string | null; calling?: string | null } = {};
@@ -83,12 +84,23 @@ export class Calls {
     if (this.watching || typeof document === "undefined") return;
     this.watching = setInterval(() => { if (!document.hidden) void this.checkRinging(); }, 4000);
     document.addEventListener("visibilitychange", this.onVisible);
+    this.unOutputs = onOutputsChanged(() => this.outputsChanged());
     void this.checkRinging();
   }
   unwatch() {
     if (this.watching) clearInterval(this.watching);
     this.watching = null;
     document.removeEventListener("visibilitychange", this.onVisible);
+    this.unOutputs?.();
+    this.unOutputs = null;
+  }
+  /** Speakers or headphones changed mid-call (Bluetooth headphones switch to their call mode when the
+   *  microphone opens): the calling sound and their voice carry on from the output in use now, instead of
+   *  going silent on the old one (and later coming out of the computer's speakers). */
+  private outputsChanged() {
+    if (this.info.state === "idle") return;
+    this.ring?.restart();
+    for (const el of this.audio.values()) reattachAudio(el);
   }
   private async checkRinging() {
     if (this.info.state !== "idle") return;
@@ -110,6 +122,9 @@ export class Calls {
     this.ring = startSound(this.sounds.calling, "calling");
     try {
       const pc = await this.newPeer(id);
+      // the microphone just opened: Bluetooth headphones are switching to their call mode, which can leave
+      // the calling sound on their old (now silent) output - in case no device change is reported, once more
+      for (const ms of [2500, 5000]) setTimeout(() => { if (this.callId === id && this.info.state === "calling") this.ring?.restart(); }, ms);
       const sdp = await describe(pc, await pc.createOffer());
       if (this.callId !== id) return;
       await api("/calls", { body: { to: uuid, call_id: id, kind: "offer", sdp } });

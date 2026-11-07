@@ -122,15 +122,15 @@ const interrupted = (e: unknown) => (e as Error)?.name === "AbortError";
 
 let ringing: { stop: () => void } | null = null;
 /** Start a call sound (loops until stop). choice: "builtin:<id>", a sound file's URL, or "builtin:none". */
-export function startSound(choice: string | null | undefined, kind: SoundKind): { stop: () => void } {
+export function startSound(choice: string | null | undefined, kind: SoundKind): { stop: () => void; restart: () => void } {
   ringing?.stop();                                   // one call sound at a time (they share a player)
   const pick = choice || DEFAULT_SOUND[kind];
-  if (pick === "builtin:none") return { stop() {} };
+  if (pick === "builtin:none") return { stop() {}, restart() {} };
   let stopped = false;
   let backup: { stop: () => void } | null = null;
   let playing: string | null = null;                 // the clip it's looping (for the watchdog below)
   let lastTime = -1, stuck = 0;
-  const el = ringEl ?? new Audio();
+  let el = ringEl ?? new Audio();
   const go = (src: string | null) => {
     if (stopped) return;
     if (!src) { backup = webAudio(builtinOf(pick, kind), true); return; }
@@ -167,6 +167,24 @@ export function startSound(choice: string | null | undefined, kind: SoundKind): 
       clearInterval(watchdog);
       if (ringing === me) { ringing = null; el.pause(); el.loop = false; }
       backup?.stop();
+    },
+    /**
+     * Your speakers or headphones changed (Bluetooth headphones switch to their call mode when the
+     * microphone opens): PipeWire leaves a playing sound on the old output, where it's silent, and later
+     * moves it to the computer's speakers. Carry on with a new player, which opens on the output in use now.
+     */
+    restart() {
+      if (stopped || !playing || ringing !== me) return;
+      const old = el;
+      const fresh = new Audio();
+      fresh.src = playing; fresh.loop = true; fresh.volume = 0.9;
+      void fresh.play().then(() => {
+        old.pause();
+        if (stopped || ringing !== me) { fresh.pause(); return; }
+        el = fresh; lastTime = -1; stuck = 0;
+      }).catch(() => {                             // (phones: only the unlocked player may play) - restart that one
+        old.pause(); old.src = playing ?? old.src; void old.play().catch(() => {});
+      });
     },
   };
   ringing = me;

@@ -7,7 +7,7 @@
 // Stages: only speakers talk. The audience connects only to speakers (not to each other), so a stage
 // holds more people; someone invited up connects to everyone, someone moved down drops the rest.
 import { api } from "./client";
-import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, onMicDead, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
+import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, onMicDead, onOutputsChanged, reattachAudio, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
 
 export type Participant = { uuid: string; muted: boolean; deafened: boolean; streaming: boolean; person?: { name: string; avatar_url: string | null };
   speaker?: boolean; hand_at?: string | null };       // stages: speaking, or a raised hand
@@ -41,6 +41,7 @@ export class Voice {
   private peers = new Map<string, Peer>();
   private mic: MediaStream | null = null;
   private unwatchMic: (() => void) | null = null;
+  private unOutputs: (() => void) | null = null;
   private fixingMic = false;
   /** Restart the microphone if it stops mid-call (lib/media.ts reviveMic), for everyone in the room. */
   private watchMic() {
@@ -88,6 +89,10 @@ export class Voice {
         api<{ participants: Participant[]; can_speak: boolean; can_stream?: boolean; stage?: boolean; moderator?: boolean }>(`/channels/${channelId}/voice`, { body: { action: "join" } }),
       ]);
       this.ice = ice_servers;
+      // speakers or headphones changed (Bluetooth headphones switch modes when the microphone opens): everyone's
+      // voice carries on from the output in use now, not silent on the old one
+      this.unOutputs?.();
+      this.unOutputs = onOutputsChanged(() => { for (const p of this.peers.values()) reattachAudio(p.audio); });
       try {
         this.mic = await getMic();
         if (!room.can_speak) this.mic.getAudioTracks().forEach((t) => { t.enabled = false; });
@@ -128,6 +133,8 @@ export class Voice {
     this.cam?.getTracks().forEach((t) => t.stop());
     this.mic = this.screen = this.cam = null;
     this.watchMic();
+    this.unOutputs?.();
+    this.unOutputs = null;
     void this.audioCtx?.close().catch(() => {});
     this.audioCtx = null;
     this.analysers.clear();

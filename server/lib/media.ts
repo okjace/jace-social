@@ -96,6 +96,28 @@ export function onMicDead(stream: MediaStream, onDead: () => void): () => void {
   return () => { track.removeEventListener("ended", onDead); document.removeEventListener("visibilitychange", visible); };
 }
 
+/**
+ * Your speakers or headphones changed (plugged in or out; Bluetooth headphones switching to their call
+ * mode when the microphone opens and back). Settled changes only: `fn` runs once things are quiet.
+ */
+export function onOutputsChanged(fn: () => void): () => void {
+  const md = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+  if (!md?.addEventListener) return () => {};
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const changed = () => { if (timer) clearTimeout(timer); timer = setTimeout(() => { timer = null; fn(); }, 700); };
+  md.addEventListener("devicechange", changed);
+  return () => { md.removeEventListener("devicechange", changed); if (timer) clearTimeout(timer); };
+}
+
+/** Play a call's sound again from scratch, so it comes out of the output in use now (see onOutputsChanged). */
+export function reattachAudio(el: HTMLAudioElement) {
+  const s = el.srcObject;
+  if (!s) return;
+  el.srcObject = null;
+  el.srcObject = s;
+  void el.play().catch(() => {});
+}
+
 /** Your camera, at a size that's fine for several people at once. */
 export function getCamera(): Promise<MediaStream> {
   return withDevice("video", chosenCamera(), { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } });
