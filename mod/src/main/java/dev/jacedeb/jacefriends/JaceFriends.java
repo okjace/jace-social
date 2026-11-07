@@ -44,6 +44,13 @@ public final class JaceFriends {
 		Compat.setScreen(new FriendsScreen(parent));
 	}
 
+	/** Jace Social's Friends screen in place of Minecraft's (mixin/VanillaFriendsMixin), going back to the screen it was opened from. */
+	public static Screen friendsInstead() {
+		Screen current = Compat.currentScreen();
+		if (current instanceof FriendsScreen) return current;
+		return new FriendsScreen(current instanceof ChatScreen || current instanceof HostScreen ? lastScreen : current);
+	}
+
 	/**
 	 * Buttons we add to Minecraft's menus: "Friends" on the title and pause screens
 	 * (before 26.2; from 26.2 Minecraft's own Friends button opens Jace Social instead),

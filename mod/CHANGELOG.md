@@ -5,6 +5,7 @@
 - **Offline accounts:** Host world has an **Offline accounts** switch, like e4all's Online Mode button, so friends without a Minecraft account can join - with e4mc too. It's off unless you turn it on: with it on, anyone with the address can join under any name, and everyone gets the **Everyone else** role (nobody can take a friend's role by using their name).
 - **No chat signing with Offline accounts on:** players' chat isn't signed in a world you host with Offline accounts, so friends with a Minecraft account and friends without one can chat together - no more "Invalid signature for profile public key" kicks.
 - Minecraft starts without e4mc or e4all; Host world says what's missing.
+- **Fixed:** opening the Friends menu again after closing it could crash the game ("Can only blur once per frame") on Minecraft 26.2 and newer.
 
 ## 1.5.2
 - **Works with permission addons:** mods like [Vanilla Permissions](https://modrinth.com/mod/vanilla-permissions), WorldEdit and Essential Commands now follow Jace Social's permission groups in worlds you host, no LuckPerms needed. For example, allow `minecraft.command.gamemode` for the Builder group (Host world → Permissions) and builders can use /gamemode without being an operator.

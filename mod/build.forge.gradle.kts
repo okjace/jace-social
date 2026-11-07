@@ -33,8 +33,8 @@ dependencies {
     compileOnly("net.luckperms:api:5.4")
     // mixins: the processor writes the refmap (Forge 1.20.1 renames methods at runtime)
     annotationProcessor("org.spongepowered:mixin:0.8.5:processor")
-    // e4mc (gives hosted worlds a public address; optional - e4all works too); in the dev/test client only
-    modRuntimeOnly("maven.modrinth:e4mc:${sc.properties.get<String>("deps.e4mc")}")
+    // (no e4mc in the dev/test client: its Forge jar's mixins can't find Minecraft's methods there - no refmap
+    // in the dev names - and stop the game; in a real game it's fine)
 }
 
 mixin {
