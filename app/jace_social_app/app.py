@@ -18,7 +18,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSystemTrayIcon, QVBoxLayout, QWidget)
 
-from jace_social_app import APP_ID, APP_NAME, APP_VERSION, DATA_DIR, URL_SCHEME, desktop, desktopkeys, hotkeys, jaceos, macinstall, minecraft, updater, wininstall
+from jace_social_app import APP_ID, APP_NAME, APP_VERSION, DATA_DIR, URL_SCHEME, desktop, desktopkeys, hotkeys, jaceos, macinstall, minecraft, screencast, updater, wininstall
 from jace_social_app.installer import SetupWizard, confirm_uninstall, run_windows_update, update_app
 
 BASE = os.environ.get("JACE_SOCIAL_URL", "https://jace-social.vercel.app").rstrip("/")
@@ -60,6 +60,62 @@ BRIDGE_JS = """
       deleteApp: function () { b.deleteApp(); },
       quit: function () { b.quitApp(); },
     };
+    if (b.waylandShare && navigator.mediaDevices) {
+      // Linux with Wayland: the browser engine can't capture the screen, so the app does (screencast.py):
+      // the desktop asks what to share, the app streams it as JPEG frames from 127.0.0.1, and they're
+      // drawn on a canvas whose stream goes to the call
+      navigator.mediaDevices.getDisplayMedia = async function () {
+        const r = await call("startScreenShare");
+        if (!r || !r.url) {
+          if (r && r.error) alert(r.error);
+          throw new DOMException((r && r.error) || "Cancelled", r && r.error ? "NotReadableError" : "NotAllowedError");
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = r.width || 1280; canvas.height = r.height || 720;
+        const g = canvas.getContext("2d");
+        const stream = canvas.captureStream(15);
+        const track = stream.getVideoTracks()[0];
+        const ctl = new AbortController();
+        const stopTrack = track.stop.bind(track);
+        let live = true;
+        const finish = function (fromPage) {
+          if (!live) return;
+          live = false;
+          ctl.abort();
+          b.stopScreenShare(r.id);
+          stopTrack();
+          if (!fromPage) track.dispatchEvent(new Event("ended"));   // stopped from the desktop: the call stops sharing
+        };
+        track.stop = function () { finish(true); };
+        (async function () {
+          try {
+            const res = await fetch(r.url, { signal: ctl.signal, cache: "no-store" });
+            const reader = res.body.getReader();
+            let buf = new Uint8Array(0);
+            for (;;) {
+              const part = await reader.read();
+              if (part.done) break;
+              const joined = new Uint8Array(buf.length + part.value.length);
+              joined.set(buf); joined.set(part.value, buf.length); buf = joined;
+              let frame = null;
+              while (buf.length >= 4) {                      // length, then a JPEG; draw only the newest
+                const n = new DataView(buf.buffer, buf.byteOffset, 4).getUint32(0);
+                if (buf.length < 4 + n) break;
+                frame = buf.slice(4, 4 + n); buf = buf.slice(4 + n);
+              }
+              if (frame) {
+                const img = await createImageBitmap(new Blob([frame], { type: "image/jpeg" }));
+                if (canvas.width !== img.width || canvas.height !== img.height) { canvas.width = img.width; canvas.height = img.height; }
+                g.drawImage(img, 0, 0);
+                img.close();
+              }
+            }
+          } catch (e) { /* stopped */ }
+          finish(false);
+        })();
+        return stream;
+      };
+    }
     window.dispatchEvent(new Event("jacedesktop"));
   });
 })();
@@ -165,6 +221,26 @@ class Bridge(QObject):
     @Property(str, constant=True)
     def version(self):
         return APP_VERSION
+
+    @Property(bool, constant=True)
+    def waylandShare(self):
+        """Screen sharing goes through the app (screencast.py): Linux with Wayland."""
+        return screencast.needed()
+
+    @Slot(int)
+    def startScreenShare(self, rid: int):
+        """Share a screen or window (the desktop asks which) -> {id, url, width, height}, {cancelled} or {error}."""
+        def run():
+            try:
+                out = screencast.start()
+            except Exception as e:  # noqa: BLE001 - always answer the page
+                out = {"error": f"Screen sharing didn't start ({e})"}
+            self.reply.emit(rid, json.dumps(out))
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot(str)
+    def stopScreenShare(self, share_id: str):
+        screencast.stop(share_id)
 
     @Property(bool, constant=True)
     def installed(self):
@@ -783,6 +859,7 @@ class Window(QMainWindow):
         if server is not None:
             server.close()
         _forget_pid()
+        screencast.stop_all()
         # Qt WebEngine sometimes hangs while shutting down (seen on Linux): then the app never
         # quit and couldn't be opened again until a restart. Give it a few seconds, then go.
         _exit_soon(5)
