@@ -80,7 +80,7 @@ public final class JaceFriends {
 	public static void onGameMessage(Component message) {
 		// the address can be hidden ("click to copy"), so also look inside the click event
 		Matcher m = E4MC.matcher(message.getString() + " " + message);
-		if (m.find()) {
+		if (m.find() && !hostingStopped && !m.group().equals(hostingAddress)) {
 			hostingAddress = m.group();
 			ticks = PRESENCE_EVERY_TICKS;       // tell friends right away
 		}
@@ -115,7 +115,63 @@ public final class JaceFriends {
 
 	public static void onPlayerJoin(ServerPlayer player) {
 		IntegratedServer sp = Minecraft.getInstance().getSingleplayerServer();
-		if (sp != null && sp.isPublished()) Roles.apply(sp, player, true);
+		if (sp == null || !sp.isPublished()) return;
+		if (hostingStopped && !player.getUUID().equals(hostId)) {
+			sp.execute(() -> player.connection.disconnect(Component.literal("The host isn't hosting this world right now")));
+			return;
+		}
+		Roles.apply(sp, player, true);
+	}
+
+	/** "Stop hosting" was clicked (the world stays open for you; until Start hosting, nobody else gets in). */
+	public static volatile boolean hostingStopped;
+	private static volatile java.util.UUID hostId;
+
+	/** Stop hosting without leaving the world: e4mc closes the public address, friends in the world are
+	 *  sent back to their menu, and nobody else can join until Start hosting again. (Client thread.) */
+	public static void stopHosting(IntegratedServer sp) {
+		Minecraft mc = Minecraft.getInstance();
+		hostId = mc.player != null ? mc.player.getUUID() : null;
+		hostingStopped = true;
+		hostingAddress = null;
+		ticks = PRESENCE_EVERY_TICKS;           // tell friends right away
+		sp.execute(() -> {
+			boolean stopped = false;
+			var commands = sp.getCommands().getDispatcher();
+			for (String tunnel : new String[]{"e4mc", "e4all"}) {
+				if (commands.getRoot().getChild(tunnel) == null) continue;
+				try {
+					commands.execute(tunnel + " stop", sp.createCommandSourceStack());
+					stopped = true;
+				} catch (Exception ignored) {
+					// try e4mc's session itself below
+				}
+				break;
+			}
+			if (!stopped) {
+				try {                           // e4mc's tunnel: link.e4mc.E4mcClient.session.stop()
+					Object session = Class.forName("link.e4mc.E4mcClient").getField("session").get(null);
+					if (session != null) session.getClass().getMethod("stop").invoke(session);
+				} catch (ReflectiveOperationException | LinkageError ignored) {
+					// not e4mc, or it changed: friends in the world are still sent out, and nobody new gets in
+				}
+			}
+			for (ServerPlayer p : new java.util.ArrayList<>(sp.getPlayerList().getPlayers())) {
+				if (!p.getUUID().equals(hostId)) p.connection.disconnect(Component.literal("The host stopped hosting this world"));
+			}
+		});
+	}
+
+	/** Host again after Stop hosting: open the world to LAN once more, so e4mc gives it a new address. */
+	public static boolean hostAgain(IntegratedServer sp, int port) {
+		try {
+			sp.getConnection().startTcpServerListener(null, port);
+		} catch (Exception e) {
+			return false;
+		}
+		hostingStopped = false;
+		hostingAddress = null;
+		return true;
 	}
 
 	public static void tick(Minecraft mc) {
@@ -138,7 +194,7 @@ public final class JaceFriends {
 					.exceptionally(e -> null);
 		}
 		IntegratedServer sp = mc.getSingleplayerServer();
-		if (sp == null || !sp.isPublished()) hostingAddress = null;
+		if (sp == null || !sp.isPublished()) { hostingAddress = null; hostingStopped = false; }
 
 		if (++ticks % 100 != 0 && ticks < PRESENCE_EVERY_TICKS) return;   // check every 5 seconds
 		JsonObject activity = activity(mc);

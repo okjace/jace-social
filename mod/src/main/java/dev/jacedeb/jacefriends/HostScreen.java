@@ -73,7 +73,13 @@ public class HostScreen extends Screen {
 		addRenderableWidget(Button.builder(Component.literal("WorldEdit…"), b -> Compat.setScreen(new WorldEditScreen(this)))
 				.bounds(cx - 50, by - 24, 100, 20).build());
 		IntegratedServer sp = minecraft.getSingleplayerServer();
-		if (sp != null && !sp.isPublished() && tunnel) {
+		if (sp != null && sp.isPublished() && !JaceFriends.hostingStopped) {
+			addRenderableWidget(Button.builder(Component.literal("Stop hosting"), b -> {
+				JaceFriends.stopHosting(sp);
+				status = "Stopped hosting - you're still in your world";
+				rebuildWidgets();
+			}).bounds(cx - 154, by, 110, 20).build());
+		} else if (sp != null && tunnel) {
 			addRenderableWidget(Button.builder(Component.literal("Start hosting"), b -> host()).bounds(cx - 154, by, 110, 20).build());
 			addRenderableWidget(Button.builder(Component.literal(allowOffline ? "Offline accounts: On" : "Offline accounts: Off"), b -> {
 				allowOffline = !allowOffline;
@@ -120,7 +126,8 @@ public class HostScreen extends Screen {
 		}
 		// offline accounts: no Minecraft account check for people joining (set before the world opens)
 		sp.setUsesAuthentication(!allowOffline);
-		status = Compat.publishLan(sp, port) ? "World opened! Waiting for its public address…" : "Couldn't open the world";
+		boolean opened = sp.isPublished() ? JaceFriends.hostAgain(sp, port) : Compat.publishLan(sp, port);
+		status = opened ? "World opened! Waiting for its public address…" : "Couldn't open the world";
 		rebuildWidgets();
 	}
 
@@ -146,8 +153,9 @@ public class HostScreen extends Screen {
 		g.text(font, title.getString(), cx - font.width(title.getString()) / 2, 10, 0xFFFFFFFF);
 		String top = status;
 		IntegratedServer sp = minecraft.getSingleplayerServer();
-		if (top.isEmpty() || (sp != null && sp.isPublished())) {
-			top = sp != null && sp.isPublished()
+		boolean hosting = sp != null && sp.isPublished() && !JaceFriends.hostingStopped;
+		if (top.isEmpty() || hosting) {
+			top = hosting
 					? (JaceFriends.hostingAddress != null ? "Hosting at " + JaceFriends.hostingAddress + " - friends click Join" : "Hosting - getting an address…")
 					: !tunnel ? "Hosting needs the e4mc mod (Jace Launcher adds it with Jace Social)"
 					: allowOffline ? "Offline accounts on: anyone with the address joins, as Everyone else"

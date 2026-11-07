@@ -1,5 +1,9 @@
 # Jace Social mod changelog
 
+## 1.5.4
+- **Fixed: Host world said "getting an address…" forever** with e4mc. e4mc writes the address straight into chat, where Jace Social didn't see it. Now it does, and friends see your world to join again.
+- **Stop hosting without leaving your world:** Host world has a **Stop hosting** button while you're hosting. It closes the public address, sends friends who are in your world back to their menu, and nobody else can join. You keep playing. **Start hosting** opens it again with a new address.
+
 ## 1.5.3
 - **Hosting uses [e4mc](https://modrinth.com/mod/e4mc) again.** e4all was removed from Modrinth, so launchers couldn't install it any more. Jace Launcher now installs e4mc with Jace Social. e4all still works if you have it (from github.com/Synquox/e4all).
 - **Offline accounts:** Host world has an **Offline accounts** switch, like e4all's Online Mode button, so friends without a Minecraft account can join - with e4mc too. It's off unless you turn it on: with it on, anyone with the address can join under any name, and everyone gets the **Everyone else** role (nobody can take a friend's role by using their name).

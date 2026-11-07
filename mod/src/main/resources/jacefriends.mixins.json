@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "dev.jacedeb.jacefriends.mixin",
   "compatibilityLevel": "${java}",
-  "mixins": ["LanCommandsMixin", "OfflineChatMixin", "VanillaFriendsMixin"],
+  "mixins": ["LanCommandsMixin", "OfflineChatMixin", "VanillaFriendsMixin", "ChatAddressMixin"],
   "injectors": {
     "defaultRequire": 0
   }

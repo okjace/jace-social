@@ -2,7 +2,7 @@
 mod.id = "jacefriends"
 mod.name = "Jace Social"
 mod.group = "dev.jacedeb"
-mod.version = "1.5.3"
+mod.version = "1.5.4"
 
 deps.fabric_loader = "0.19.5"
 loomx.loom_version = "1.18-SNAPSHOT"
