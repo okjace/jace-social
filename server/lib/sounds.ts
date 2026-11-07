@@ -180,17 +180,24 @@ let messageTurn = 0;
 export function playOnce(choice: string | null | undefined, kind: SoundKind = "message") {
   const pick = choice || DEFAULT_SOUND[kind];
   if (pick === "builtin:none") return;
-  const el = msgEl ?? new Audio();
   const turn = ++messageTurn;
   const go = (src: string | null) => {
     if (!src) { webAudio(builtinOf(pick, kind), false); return; }
+    // the shared (unlocked) player, unless a sound is still playing on it: then a player of its own, so
+    // the new sound doesn't cut the last one off (two messages close together cut each other short)
+    const busy = !!msgEl && !msgEl.paused && !msgEl.ended;
+    const el = busy ? new Audio() : msgEl ?? new Audio();
     el.src = src; el.loop = false; el.volume = 0.9; el.muted = false; el.currentTime = 0;
     void el.play().catch((e) => {
       if (interrupted(e)) return;
+      if (busy && msgEl && (e as Error)?.name === "NotAllowedError") {   // (phones: only the unlocked player may play)
+        msgEl.src = src; msgEl.currentTime = 0; void msgEl.play().catch(() => {});
+        return;
+      }
       blocked(e);
       webAudio(builtinOf(/^https?:/.test(pick) ? DEFAULT_SOUND[kind] : pick, kind), false);
     });
-    setTimeout(() => { if (turn === messageTurn) el.pause(); }, MESSAGE_MAX);   // (not a newer message's sound)
+    setTimeout(() => { if (el !== msgEl || turn === messageTurn) el.pause(); }, MESSAGE_MAX);   // (the shared one: not a newer message's sound)
   };
   if (/^https?:\/\//.test(pick)) go(pick);
   else void builtinClip(builtinOf(pick, kind), false).then(go);

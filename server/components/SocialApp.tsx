@@ -202,6 +202,9 @@ function Main({ me, setMe, signOut, inviteCode }: {
   const appealsOn = !!me.appeals && me.appeals !== "none";
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [detail, setDetail] = useState<ServerDetail | null>(null);
+  /** The server whose onboarding is showing: it stays up until you finish or close it, even if the
+   *  server reloads behind it (new messages, people joining) - before, it could vanish a moment after joining. */
+  const [onboardingFor, setOnboardingFor] = useState<string | null>(null);
   const [reload, setReload] = useState(0);              // bump to reload the open chat
   const [profile, setProfile] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(inviteCode ? { kind: "server" } : !me.onboarded && !me.is_bot ? { kind: "welcome" } : null);
@@ -476,6 +479,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
     document.title = unread ? `(${unread}) Jace Social` : "Jace Social";
     desktop()?.setUnread(unread);
   }, [unread]);
+
+  useEffect(() => {
+    if (detail && !detail.onboarded && view.kind === "server" && view.id === detail.server.id) setOnboardingFor(detail.server.id);
+  }, [detail, view]);
 
   async function openServer(id: string, channel?: string) {
     const d = await loadDetail(id);
@@ -835,8 +842,10 @@ function Main({ me, setMe, signOut, inviteCode }: {
       {modal?.kind === "report" && <ReportModal target={modal.target} onClose={() => setModal(null)} onError={err} />}
       {modal?.kind === "channel" && detail && <ChannelSettings detail={detail} channel={detail.channels.find((c) => c.id === modal.channel.id) ?? modal.channel}
         onClose={() => setModal(null)} onError={err} onChanged={() => void loadDetail(detail.server.id)} />}
-      {view.kind === "server" && detail && (modal?.kind === "serverWelcome" || (!detail.onboarded && !modal)) && (
-        <ServerOnboarding detail={detail} onError={err} onDone={() => { setModal(null); void loadDetail(detail.server.id); }}
+      {view.kind === "server" && detail && view.id === detail.server.id
+        && (modal?.kind === "serverWelcome" || ((!detail.onboarded || onboardingFor === detail.server.id) && !modal)) && (
+        <ServerOnboarding key={detail.server.id} detail={detail} onError={err}
+          onDone={() => { setOnboardingFor(null); setModal(null); setDetail({ ...detail, onboarded: true }); void loadDetail(detail.server.id); }}
           onOpenChannel={(id) => setView({ kind: "server", id: detail.server.id, channel: id })} />
       )}
       <CallPanel calls={calls} info={call} people={people} />

@@ -12,10 +12,12 @@ export const GET = handler(async (req, ctx) => {
   const p = await me(req);
   const id = cleanId((await ctx.params).id);
   const sc = await serverCtx(id, p.uuid);
-  const [{ data: chans }, { data: members }, { data: memberRoles }] = await Promise.all([
+  const [{ data: chans }, { data: members }, { data: memberRoles }, { data: myRow }] = await Promise.all([
     db().from("channels").select("*").eq("server_id", id).neq("kind", "post").order("position").order("created_at"),   // (forum posts: /channels/{forum}/posts)
     db().from("server_members").select("uuid, role, joined_at, nickname, timeout_until, onboarded").eq("server_id", id),
     db().from("server_member_roles").select("uuid, role_id").eq("server_id", id),
+    // your own row on its own: the member list stops at 1000 rows, and you missing from it read as "onboarded"
+    db().from("server_members").select("onboarded").eq("server_id", id).eq("uuid", p.uuid).maybeSingle(),
   ]);
   const voiceIds = (chans ?? []).filter((c) => c.kind === "voice" || c.kind === "stage").map((c) => c.id);
   const { data: voice } = voiceIds.length
@@ -47,7 +49,7 @@ export const GET = handler(async (req, ctx) => {
       timeout_until: m.timeout_until, roles: mine.filter((r) => r.uuid === m.uuid).map((r) => r.role_id),
     })),
     voice: (voice ?? []).filter((v) => visible.some((c) => c.id === v.channel_id) && new Date(v.last_seen).getTime() > fresh),
-    onboarded: (members ?? []).find((m) => m.uuid === p.uuid)?.onboarded ?? true,
+    onboarded: myRow?.onboarded ?? true,
   };
 });
 
