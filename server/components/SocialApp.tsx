@@ -122,7 +122,7 @@ function SignIn({ error, inviteCode }: { error: string; inviteCode?: string }) {
   async function signInJaceOs() {
     setJaceOsBusy(true); setJaceOsError("");
     const d = await desktopReady();
-    const r = d?.signInJaceOS ? await d.signInJaceOS().catch(() => ({ error: "The desktop app didn't answer - try again" })) : { error: "Update the desktop app to sign in this way" };
+    const r: { token?: string; error?: string } = d?.signInJaceOS ? await d.signInJaceOS().catch(() => ({ error: "The desktop app didn't answer - try again" })) : { error: "Update the desktop app to sign in this way" };
     if (r.token) { setToken(r.token); location.reload(); return; }
     setJaceOsBusy(false);
     setJaceOsError(r.error ?? "Couldn't sign in with this computer's Jace account");
