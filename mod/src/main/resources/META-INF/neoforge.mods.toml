@@ -13,7 +13,7 @@ version = "${version}"
 authors = "jace.deb"
 displayURL = "https://jace-store-deb.vercel.app/project/jace-social-minecraft"
 logoFile = "assets/jacefriends/icon.png"
-description = "Jace Social in Minecraft: friends, group chats and voice calls, host your world for friends (with e4all) and join theirs in one click."
+description = "Jace Social in Minecraft: friends, group chats and voice calls, host your world for friends (with e4mc or e4all) and join theirs in one click."
 
 [[dependencies.${id}]]
 modId = "minecraft"
@@ -23,8 +23,8 @@ ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.${id}]]
-modId = "e4all"
-type = "${e4all_type}"
+modId = "e4mc"
+type = "${e4mc_type}"
 versionRange = "[0,)"
 ordering = "NONE"
 side = "CLIENT"

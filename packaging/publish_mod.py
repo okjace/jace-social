@@ -20,8 +20,9 @@ CLI = ROOT / "packaging" / "jace-store.mjs"
 SLUG = os.environ.get("JACE_STORE_PROJECT") or "jace-social-minecraft"
 LOADERS = {"fabric": ["fabric", "quilt"], "neoforge": ["neoforge"], "forge": ["forge"]}
 # Jace Store lists these on the project page, and Jace Launcher installs them with the mod.
-# (e4all is left out where stonecutter.properties.toml has a blank deps.e4all: it doesn't work there)
-DEPENDS = {"fabric": ["modrinth:fabric-api"], "neoforge": [], "forge": []}
+# e4mc (hosting your world for friends) is on Modrinth for every loader and version (e4all, its fork,
+# works too, but it's GitHub-only now, so launchers can't install it).
+DEPENDS = {"fabric": ["modrinth:fabric-api", "modrinth:e4mc"], "neoforge": ["modrinth:e4mc"], "forge": ["modrinth:e4mc"]}
 LOADER_NAMES = {"fabric": "Fabric/Quilt", "neoforge": "NeoForge", "forge": "Forge"}
 
 
@@ -31,9 +32,7 @@ def releases() -> dict:
 
 
 def depends(loader: str, mc: str) -> str:
-    props = tomllib.loads((ROOT / "mod" / "stonecutter.properties.toml").read_text())
-    e4all = props.get(loader, {}).get(mc, {}).get("deps", {}).get("e4all", "")
-    return ",".join(DEPENDS[loader] + (["modrinth:e4all"] if e4all else []))
+    return ",".join(DEPENDS[loader])
 
 
 def changelog(version: str) -> str:

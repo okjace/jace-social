@@ -16,6 +16,14 @@ import java.util.List;
 /** Host your singleplayer world for friends and choose what each of them can do. */
 public class HostScreen extends Screen {
 	private static final int ROW = 24;
+	/** e4mc (or its fork e4all) gives a hosted world its public address. Either works; without one,
+	 *  this screen says so instead of "Start hosting". */
+	private final boolean tunnel = Compat.isModLoaded("e4mc") || Compat.isModLoaded("e4all");
+	/** Let offline (non-premium) accounts join, like e4all's Online Mode switch - here for e4mc too.
+	 *  Off unless turned on: with it on, anyone with the address can join under any name. Everyone then
+	 *  gets an offline id (made from their name), so nobody has a friend's role: all get "Everyone else"
+	 *  (Roles goes by id - an offline player can't claim a friend's role by using their name). */
+	static boolean allowOffline = false;
 	private final Screen parent;
 	private final List<JsonObject> friends = new ArrayList<>();
 	private String status = "Loading friends…";
@@ -65,8 +73,12 @@ public class HostScreen extends Screen {
 		addRenderableWidget(Button.builder(Component.literal("WorldEdit…"), b -> Compat.setScreen(new WorldEditScreen(this)))
 				.bounds(cx - 50, by - 24, 100, 20).build());
 		IntegratedServer sp = minecraft.getSingleplayerServer();
-		if (sp != null && !sp.isPublished()) {
+		if (sp != null && !sp.isPublished() && tunnel) {
 			addRenderableWidget(Button.builder(Component.literal("Start hosting"), b -> host()).bounds(cx - 154, by, 110, 20).build());
+			addRenderableWidget(Button.builder(Component.literal(allowOffline ? "Offline accounts: On" : "Offline accounts: Off"), b -> {
+				allowOffline = !allowOffline;
+				rebuildWidgets();
+			}).bounds(cx + 54, by - 24, 100, 20).build());
 		}
 		if (friends.size() > per) {
 			addRenderableWidget(Button.builder(Component.literal("<"), b -> { page--; rebuildWidgets(); })
@@ -106,7 +118,9 @@ public class HostScreen extends Screen {
 		} catch (Exception e) {
 			port = 25565;
 		}
-		status = Compat.publishLan(sp, port) ? "World opened! Waiting for e4all to give it an address…" : "Couldn't open the world";
+		// offline accounts: no Minecraft account check for people joining (set before the world opens)
+		sp.setUsesAuthentication(!allowOffline);
+		status = Compat.publishLan(sp, port) ? "World opened! Waiting for its public address…" : "Couldn't open the world";
 		rebuildWidgets();
 	}
 
@@ -135,6 +149,8 @@ public class HostScreen extends Screen {
 		if (top.isEmpty() || (sp != null && sp.isPublished())) {
 			top = sp != null && sp.isPublished()
 					? (JaceFriends.hostingAddress != null ? "Hosting at " + JaceFriends.hostingAddress + " - friends click Join" : "Hosting - getting an address…")
+					: !tunnel ? "Hosting needs the e4mc mod (Jace Launcher adds it with Jace Social)"
+					: allowOffline ? "Offline accounts on: anyone with the address joins, as Everyone else"
 					: "Choose what friends can do, then start hosting";
 		}
 		g.text(font, top, cx - font.width(top) / 2, 22, 0xFFA0A6B0);

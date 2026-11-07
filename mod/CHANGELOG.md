@@ -1,5 +1,10 @@
 # Jace Social mod changelog
 
+## 1.5.3
+- **Hosting uses [e4mc](https://modrinth.com/mod/e4mc) again.** e4all was removed from Modrinth, so launchers couldn't install it any more. Jace Launcher now installs e4mc with Jace Social. e4all still works if you have it (from github.com/Synquox/e4all).
+- **Offline accounts:** Host world has an **Offline accounts** switch, like e4all's Online Mode button, so friends without a Minecraft account can join - with e4mc too. It's off unless you turn it on: with it on, anyone with the address can join under any name, and everyone gets the **Everyone else** role (nobody can take a friend's role by using their name).
+- Minecraft starts without e4mc or e4all; Host world says what's missing.
+
 ## 1.5.2
 - **Works with permission addons:** mods like [Vanilla Permissions](https://modrinth.com/mod/vanilla-permissions), WorldEdit and Essential Commands now follow Jace Social's permission groups in worlds you host, no LuckPerms needed. For example, allow `minecraft.command.gamemode` for the Builder group (Host world → Permissions) and builders can use /gamemode without being an operator.
 - **NeoForge and Forge too:** mods that ask NeoForge's / Forge's permission API follow Jace Social's groups in worlds you host. Anything the groups don't mention works as before.

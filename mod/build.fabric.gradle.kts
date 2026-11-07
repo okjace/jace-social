@@ -47,11 +47,10 @@ dependencies {
     // Use `mod{dependency type}` even on 26.1+ - loom-back-compat converts them
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:${sc.properties.get<String>("deps.fabric_api")}")
-    // e4all (required at runtime: hosts worlds publicly), in the dev/test client only.
-    // Before 26.1 the real jar can't load in a Mojang-mapped dev client (its mixins target
-    // production names), so those versions get an empty stand-in mod instead.
-    if (sc.current.parsed >= "26.1") modLocalRuntime("maven.modrinth:e4all:${sc.properties.get<String>("deps.e4all")}")
-    else runtimeOnly(files(rootProject.file("ci/e4all-stub")))   // classpath mods load as-is, no remapping
+    // e4mc (gives hosted worlds a public address; optional - e4all works too), in the dev/test client
+    // only. Before 26.1 the real jar can't load in a Mojang-mapped dev client (its mixins target
+    // production names), so those versions run without it.
+    if (sc.current.parsed >= "26.1") modLocalRuntime("maven.modrinth:e4mc:${sc.properties.get<String>("deps.e4mc")}")
     // lucko's fabric-permissions-api in the dev/test client, so the smoke test shows Jace Social
     // hooking into it (see FabricPermissions); mods like Vanilla Permissions bundle it for real
     val fabricPermissionsApi = when {

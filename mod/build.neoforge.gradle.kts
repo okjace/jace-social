@@ -31,10 +31,8 @@ repositories {
 dependencies {
     // LuckPerms API: only used when LuckPerms is installed (the permissions menus)
     compileOnly("net.luckperms:api:5.4")
-    // e4all (required at runtime: hosts worlds publicly); in the dev/test client only.
-    // Blank for versions where e4all itself doesn't work; it's optional there.
-    val e4all = sc.properties.get<String>("deps.e4all")
-    if (e4all.isNotBlank()) runtimeOnly("maven.modrinth:e4all:$e4all")
+    // e4mc (gives hosted worlds a public address; optional - e4all works too); in the dev/test client only
+    runtimeOnly("maven.modrinth:e4mc:${sc.properties.get<String>("deps.e4mc")}")
 }
 
 neoForge {
@@ -82,7 +80,7 @@ tasks {
             register("name", sc.properties["mod.name"])
             register("version", sc.properties["mod.version"])
             register("minecraft", sc.properties["mod.mc_compat"])
-            register("e4all_type", if (sc.properties.get<String>("deps.e4all").isBlank()) "optional" else "required")
+            register("e4mc_type", "optional")      // (hosting: e4mc, or e4all - either one, so neither is required)
         }
 
         // NeoForge before 1.20.5 still read META-INF/mods.toml (computed here so the

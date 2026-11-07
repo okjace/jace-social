@@ -33,8 +33,8 @@ dependencies {
     compileOnly("net.luckperms:api:5.4")
     // mixins: the processor writes the refmap (Forge 1.20.1 renames methods at runtime)
     annotationProcessor("org.spongepowered:mixin:0.8.5:processor")
-    // e4all (required at runtime: hosts worlds publicly); in the dev/test client only
-    modRuntimeOnly("maven.modrinth:e4all:${sc.properties.get<String>("deps.e4all")}")
+    // e4mc (gives hosted worlds a public address; optional - e4all works too); in the dev/test client only
+    modRuntimeOnly("maven.modrinth:e4mc:${sc.properties.get<String>("deps.e4mc")}")
 }
 
 mixin {

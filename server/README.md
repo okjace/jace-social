@@ -9,7 +9,7 @@ Jace Launcher, the desktop app and the Jace Social mod all talk to it. It's a Ne
 - **Sign-in (desktop app, Jace Launcher, mod):** works like joining a Minecraft server. The server hands out a one-time id, the client tells Mojang it "joined" it, and the server asks Mojang to confirm (`hasJoined`). Only the real account owner can do that. Minecraft tokens never reach this server, and only Microsoft accounts work.
 - **Database access:** every table has row-level security on and no policies, so only the server (secret key) can read or write. Players go through `/api/v1/*` with a bearer token.
 - **Live updates:** each player has a private, unguessable Supabase Realtime channel. Broadcasts only say what changed (never message text), and clients then fetch through the API.
-- **Hosted worlds:** the mod opens your world to LAN, the e4all mod gives it a public address, and the address is shared with friends through your status.
+- **Hosted worlds:** the mod opens your world to LAN, the e4mc mod (or e4all) gives it a public address, and the address is shared with friends through your status.
 
 ## Setup (one time)
 

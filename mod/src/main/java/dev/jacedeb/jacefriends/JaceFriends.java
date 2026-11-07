@@ -69,7 +69,7 @@ public final class JaceFriends {
 		return out;
 	}
 
-	/** e4all posts the public address of an opened world in chat; remember it. */
+	/** e4mc (or e4all) posts the public address of an opened world in chat; remember it. */
 	public static void onGameMessage(Component message) {
 		// the address can be hidden ("click to copy"), so also look inside the click event
 		Matcher m = E4MC.matcher(message.getString() + " " + message);
