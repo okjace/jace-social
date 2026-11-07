@@ -1,5 +1,8 @@
 # Jace Social mod changelog
 
+## 1.5.5
+- **Fixed (really this time): Host world said "getting an address…" forever** on Minecraft 26.x. 1.5.4 listened for e4mc's message in a way 26.3 doesn't use any more, so it still never saw the address.
+
 ## 1.5.4
 - **Fixed: Host world said "getting an address…" forever** with e4mc. e4mc writes the address straight into chat, where Jace Social didn't see it. Now it does, and friends see your world to join again.
 - **Stop hosting without leaving your world:** Host world has a **Stop hosting** button while you're hosting. It closes the public address, sends friends who are in your world back to their menu, and nobody else can join. You keep playing. **Start hosting** opens it again with a new address.
