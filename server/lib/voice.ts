@@ -7,7 +7,7 @@
 // Stages: only speakers talk. The audience connects only to speakers (not to each other), so a stage
 // holds more people; someone invited up connects to everyone, someone moved down drops the rest.
 import { api } from "./client";
-import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, readStreams, tagStreams, type StreamKinds } from "./media";
+import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, onMicDead, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
 
 export type Participant = { uuid: string; muted: boolean; deafened: boolean; streaming: boolean; person?: { name: string; avatar_url: string | null };
   speaker?: boolean; hand_at?: string | null };       // stages: speaking, or a raised hand
@@ -40,6 +40,24 @@ export class Voice {
   private me = "";
   private peers = new Map<string, Peer>();
   private mic: MediaStream | null = null;
+  private unwatchMic: (() => void) | null = null;
+  private fixingMic = false;
+  /** Restart the microphone if it stops mid-call (lib/media.ts reviveMic), for everyone in the room. */
+  private watchMic() {
+    this.unwatchMic?.();
+    this.unwatchMic = this.mic ? onMicDead(this.mic, () => void this.fixMic()) : null;
+  }
+  private async fixMic() {
+    if (this.fixingMic || !this.state.channelId || !this.mic) return;
+    this.fixingMic = true;
+    try {
+      const senders = [...this.peers.values()].flatMap((p) => p.pc.getSenders());
+      const enabled = this.mic.getAudioTracks()[0]?.enabled ?? false;   // (muted, deafened or can't speak: stays off)
+      const fresh = await reviveMic(this.mic, senders, enabled);
+      if (fresh && this.state.channelId) { this.mic = fresh; this.watchMic(); this.watchLevel(this.me, fresh); }
+      else fresh?.getTracks().forEach((t) => t.stop());
+    } finally { this.fixingMic = false; }
+  }
   private screen: MediaStream | null = null;
   private cam: MediaStream | null = null;
   private ice: RTCIceServer[] = [];
@@ -74,6 +92,7 @@ export class Voice {
         this.mic = await getMic();
         if (!room.can_speak) this.mic.getAudioTracks().forEach((t) => { t.enabled = false; });
         this.watchLevel(me, this.mic);
+        this.watchMic();
       } catch (e) {
         this.set({ noMic: true });
         this.onError(`${deviceProblem(e, "microphone")} You can still listen.`);   // say why, not just a crossed-out mic
@@ -108,6 +127,7 @@ export class Voice {
     this.screen?.getTracks().forEach((t) => t.stop());
     this.cam?.getTracks().forEach((t) => t.stop());
     this.mic = this.screen = this.cam = null;
+    this.watchMic();
     void this.audioCtx?.close().catch(() => {});
     this.audioCtx = null;
     this.analysers.clear();
@@ -156,6 +176,7 @@ export class Voice {
     const muted = this.state.muted;                     // (still muted if you can't speak in this room)
     this.mic.getAudioTracks().forEach((t) => { t.enabled = !muted && !this.state.deafened; });
     this.watchLevel(this.me, this.mic);
+    this.watchMic();
     this.set({ noMic: false, muted });
     for (const [uuid, peer] of this.peers) {
       // reuses the receive-only audio slot each connection was made with

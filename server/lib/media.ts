@@ -67,6 +67,35 @@ export function getMic(): Promise<MediaStream> {
   return withDevice("audio", chosenMic(), { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
 }
 
+/**
+ * Your microphone stopped mid-call (phones: the browser went to the background or the screen locked,
+ * another app or a phone call took the microphone, iOS interrupted audio) - you'd stay silent for the
+ * rest of the call. Gets it again and puts it in place of the dead one in `senders` (no reconnecting).
+ * -> the new microphone, or null if it's still fine or can't be had right now.
+ */
+export async function reviveMic(old: MediaStream | null, senders: RTCRtpSender[], enabled: boolean): Promise<MediaStream | null> {
+  const dead = old?.getAudioTracks()[0];
+  if (!dead || (dead.readyState !== "ended" && !dead.muted)) return null;
+  let fresh: MediaStream;
+  try { fresh = await getMic(); } catch { return null; }
+  const track = fresh.getAudioTracks()[0];
+  if (!track) return null;
+  track.enabled = enabled;
+  for (const s of senders) if (s.track === dead) await s.replaceTrack(track).catch(() => {});
+  dead.stop();
+  return fresh;
+}
+
+/** Calls `onDead` when the microphone stops by itself, or when you come back to the page and it's silent. */
+export function onMicDead(stream: MediaStream, onDead: () => void): () => void {
+  const track = stream.getAudioTracks()[0];
+  if (!track) return () => {};
+  const visible = () => { if (!document.hidden && (track.readyState === "ended" || track.muted)) onDead(); };
+  track.addEventListener("ended", onDead);
+  document.addEventListener("visibilitychange", visible);
+  return () => { track.removeEventListener("ended", onDead); document.removeEventListener("visibilitychange", visible); };
+}
+
 /** Your camera, at a size that's fine for several people at once. */
 export function getCamera(): Promise<MediaStream> {
   return withDevice("video", chosenCamera(), { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } });

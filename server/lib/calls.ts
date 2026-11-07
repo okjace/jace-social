@@ -5,7 +5,7 @@
 // (no trickle), and audio goes straight between players or through the TURN relay.
 import { api } from "./client";
 import { startSound } from "./sounds";
-import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, readStreams, tagStreams, type StreamKinds } from "./media";
+import { describeWhenReady, deviceProblem, getCamera, getMic, hasRelay, markMove, onMicDead, readStreams, reviveMic, tagStreams, type StreamKinds } from "./media";
 
 export type CallState = "idle" | "calling" | "ringing" | "in-call";
 export type CallInfo = {
@@ -32,6 +32,21 @@ export class Calls {
   private offerSdp = "";
   private pc: RTCPeerConnection | null = null;
   private mic: MediaStream | null = null;
+  private unwatchMic: (() => void) | null = null;
+  private fixingMic = false;
+  /** Restart the microphone if it stops mid-call (lib/media.ts reviveMic). */
+  private watchMic() {
+    this.unwatchMic?.();
+    this.unwatchMic = this.mic ? onMicDead(this.mic, () => void this.fixMic()) : null;
+  }
+  private async fixMic() {
+    if (this.fixingMic || !this.pc || !this.mic) return;
+    this.fixingMic = true;
+    try {
+      const fresh = await reviveMic(this.mic, this.pc.getSenders(), !this.info.muted);
+      if (fresh && this.pc) { this.mic = fresh; this.watchMic(); } else fresh?.getTracks().forEach((t) => t.stop());
+    } finally { this.fixingMic = false; }
+  }
   private screen: MediaStream | null = null;
   private screenSenders: RTCRtpSender[] = [];
   private camera: MediaStream | null = null;
@@ -195,6 +210,7 @@ export class Calls {
     if (!pc || this.mic || this.info.state !== "in-call") return;
     try { this.mic = await getMic(); } catch (e) { this.onEnded(deviceProblem(e, "microphone")); return; }
     this.mic.getAudioTracks().forEach((t) => { t.enabled = !this.info.muted; pc.addTrack(t, this.mic!); });
+    this.watchMic();
     this.set({ ...this.info, noMic: false });
     await this.renegotiate();
   }
@@ -337,6 +353,7 @@ export class Calls {
     this.relay = hasRelay(ice_servers);
     this.pc = pc;
     this.mic = mic;
+    this.watchMic();
     if (mic) mic.getAudioTracks().forEach((t) => { t.enabled = !this.info.muted; pc.addTrack(t, mic); });
     else pc.addTransceiver("audio", { direction: "recvonly" });
     this.set({ ...this.info, noMic: !mic });
@@ -388,6 +405,7 @@ export class Calls {
     this.pc = null;
     this.mic?.getTracks().forEach((t) => t.stop());
     this.mic = null;
+    this.watchMic();
     this.screen?.getTracks().forEach((t) => t.stop());
     this.screen = null;
     this.screenSenders = [];
