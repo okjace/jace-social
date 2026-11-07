@@ -1,7 +1,7 @@
 // Where uploads go: several storage services, each used until it's nearly full - for the most free
 // space (supabase/017_storage.sql keeps how much each holds, and where every file went).
 //
-//   1. Cloudflare R2   10 GB free, free downloads, files up to 500 MB   (R2_* settings)
+//   1. Cloudflare R2   used up to 4.5 GB (of its 10 GB free), free downloads, files up to 500 MB   (R2_* settings)
 //   2. Backblaze B2    10 GB free, files up to 500 MB                   (B2_* settings)
 //   3. Supabase        1 GB free, files up to 50 MB                     (always there)
 //
@@ -33,7 +33,7 @@ export function providers(): Provider[] {
   const r2Endpoint = process.env.R2_ENDPOINT || (process.env.CLOUDFLARE_ACCOUNT_ID ? `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com` : "");
   if (process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET && process.env.R2_PUBLIC_URL && r2Endpoint) {
     list.push({
-      id: "r2", maxFile: 500 * MB, capacity: gb(process.env.R2_LIMIT_GB, 9.5 * GB), base: trim(process.env.R2_PUBLIC_URL),
+      id: "r2", maxFile: 500 * MB, capacity: gb(process.env.R2_LIMIT_GB, 4.5 * GB), base: trim(process.env.R2_PUBLIC_URL),
       s3: { bucket: process.env.R2_BUCKET, client: new S3Client({ region: "auto", endpoint: r2Endpoint, forcePathStyle: true,
         credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY } }) },
     });
@@ -113,7 +113,7 @@ export async function putFile(owner: string | null, area: Area, key: string, byt
  * Files uploaded straight to R2/B2 (message files): check each one's real size before it's sent - the
  * app says how big a file is when it asks to upload, so a tampered app could say 1 KB and upload 500 MB,
  * and the "nearly full" totals would be wrong. Too big: deleted and refused. Otherwise the total is
- * corrected to the real size, so a service is never filled past its limit (9.5 GB on R2/B2).
+ * corrected to the real size, so a service is never filled past its limit (4.5 GB on R2, 9.5 GB on B2).
  */
 export async function checkUploads(urls: string[]) {
   if (!urls.length) return;
