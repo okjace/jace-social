@@ -15,6 +15,8 @@ export async function GET(req: Request) {
   const request = r as Req;
   let result: Record<string, unknown>;
   try {
+    // Jace always asks "Do you want Jace Social to access your Jace info?": "no" comes back as access_denied
+    if (sp.get("error") === "access_denied") throw new ApiError(400, "You didn't allow Jace Social to use your Jace account, so you aren't signed in");
     if (sp.get("error")) throw new ApiError(400, sp.get("error_description") || "Sign-in was cancelled");
     const user = await jaceUserFromCode(sp.get("code") ?? "");
     result = request.purpose === "signin" ? await signInWithJace(user) : await link(user, request.link_uuid!);

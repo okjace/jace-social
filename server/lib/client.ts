@@ -222,11 +222,6 @@ export type UpdateCheck = { current: string; latest?: string; newer?: boolean; e
 /** The desktop app adds this bridge (see app/ in the repo); the web version doesn't have it. */
 export type DesktopBridge = {
   signInMinecraft(): Promise<{ token?: string; error?: string }>;
-  /** Jace OS: sign in with the computer's Jace account -> a session, or {error} (1.0.17+; 1.0.16 answered {}). */
-  signInJaceOS?(): Promise<{ token?: string; error?: string }>;
-  /** Jace OS: the computer's Jace account, for "Sign in as @you?" -> {username, name, picture} or {} (1.0.17+). */
-  jaceOsAccount?(): Promise<{ username?: string; name?: string; picture?: string | null }>;
-  setJaceOsSignIn?(on: boolean): void;
   linkMinecraft(token: string): Promise<{ ok?: boolean; error?: string }>;
   notify(title: string, body: string): void;
   setUnread(count: number): void;
@@ -236,8 +231,7 @@ export type DesktopBridge = {
   checkForUpdate?(): Promise<UpdateCheck>;
   /** Open on sign-in and the overlay shortcut (1.0.5+). */
   getDesktopSettings?(): Promise<{ startup: boolean | null; overlayShortcut: string; overlayError: string | null; shortcutsUnsupported: string | null;
-    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean;
-    jaceOsSignIn?: boolean | null }>;              // Jace OS: sign in with the computer's Jace account (null: not Jace OS)
+    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean }>;
   setStartup?(on: boolean): Promise<{ ok?: boolean; error?: string }>;
   setOverlayShortcut?(combo: string): Promise<{ ok?: boolean; error?: string; note?: string | null }>;
   /** Wayland: open the desktop's own screen for changing the overlay shortcut (1.0.11+). */

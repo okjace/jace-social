@@ -21,7 +21,7 @@ import { Chat } from "./Chat";
 import { LinkGuard } from "./Markdown";
 import { nameStyle } from "./Message";
 import { MinecraftDevice } from "./MinecraftDevice";
-import { hasAgreed, LegalDialog } from "./Legal";
+import { AccountTerms } from "./Legal";
 import { isDeletingAccount, RecoveryNotice } from "./DeleteAccount";
 import { Appeals, type AppealRow } from "./Appeals";
 import { AddFriendForm } from "./AddFriend";
@@ -33,7 +33,7 @@ import { Announcements, BotTag, Broadcast, Docs, JACE_BOT, JaceInbox, JaceTabs, 
 import { AccountSwitcher, AddServerModal, NewGroupModal, ProfileModal, SettingsModal, StatusEditor, type SettingsTab } from "./Modals";
 import { ServerOnboarding, Welcome } from "./Onboarding";
 import { inviteLink, ServerSettings } from "./ServerSettings";
-import { ActivityCard, Avatar, Modal, PersonRow } from "./ui";
+import { ActivityCard, Avatar, PersonRow } from "./ui";
 import { useVoice, VoiceBar, VoiceRoom, VoiceUsers } from "./Voice";
 
 type FriendsData = { friends: Person[]; incoming: Person[]; outgoing: Person[]; jace?: Person | null; others?: Person[] };
@@ -103,33 +103,8 @@ function SignIn({ error, inviteCode }: { error: string; inviteCode?: string }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [device, setDevice] = useState(false);
-  const [legal, setLegal] = useState<null | (() => void)>(null);   // the Terms popup, then this sign-in
-  // Jace OS: "Sign in as @you?" with the computer's Jace account, each time this screen shows
-  const [jaceOs, setJaceOs] = useState<{ username: string; name: string; picture: string | null } | null>(null);
-  const [jaceOsBusy, setJaceOsBusy] = useState(false);
-  const [jaceOsError, setJaceOsError] = useState("");
   useEffect(() => { setApp(inDesktop()); }, []);
-  useEffect(() => {
-    if (!inDesktop()) return;
-    let gone = false;
-    void (async () => {
-      const d = await desktopReady();
-      const acct = d?.jaceOsAccount ? await d.jaceOsAccount().catch(() => ({} as { username?: string })) : {};
-      if (!gone && "username" in acct && acct.username) setJaceOs(acct as { username: string; name: string; picture: string | null });
-    })();
-    return () => { gone = true; };
-  }, []);
-  async function signInJaceOs() {
-    setJaceOsBusy(true); setJaceOsError("");
-    const d = await desktopReady();
-    const r: { token?: string; error?: string } = d?.signInJaceOS ? await d.signInJaceOS().catch(() => ({ error: "The desktop app didn't answer - try again" })) : { error: "Update the desktop app to sign in this way" };
-    if (r.token) { setToken(r.token); location.reload(); return; }
-    setJaceOsBusy(false);
-    setJaceOsError(r.error ?? "Couldn't sign in with this computer's Jace account");
-  }
   const jaceUrl = `/api/v1/auth/jace?return_to=${encodeURIComponent(back)}`;
-  /** Shows the Terms and Privacy popup the first time on this device, then signs in. */
-  const agreeThen = (go: () => void) => (hasAgreed() ? go() : setLegal(() => go));
   async function minecraft() {
     setBusy(true); setProblem("");
     const d = await desktopReady();
@@ -152,31 +127,14 @@ function SignIn({ error, inviteCode }: { error: string; inviteCode?: string }) {
         <p className="muted">Friends, chat and servers - with Minecraft built in.</p>
         {(error || problem) && <p className="error">{problem || error}</p>}
         <a className="btn primary" style={{ display: "block", padding: 12, textDecoration: "none", margin: "20px 0 10px" }}
-          href={jaceUrl} onClick={(e) => { if (!hasAgreed()) { e.preventDefault(); agreeThen(() => { location.href = jaceUrl; }); } }}>Sign in with Jace</a>
+          href={jaceUrl}>Sign in with Jace</a>
         {app
-          ? <button className="btn" style={{ display: "block", width: "100%", padding: 12 }} disabled={busy} onClick={() => agreeThen(() => void minecraft())}>
+          ? <button className="btn" style={{ display: "block", width: "100%", padding: 12 }} disabled={busy} onClick={() => void minecraft()}>
               {busy ? "Signing in…" : "⛏ Sign in with Minecraft"}</button>
-          : <button className="btn" style={{ display: "block", width: "100%", padding: 12 }} onClick={() => agreeThen(() => setDevice(true))}>
+          : <button className="btn" style={{ display: "block", width: "100%", padding: 12 }} onClick={() => setDevice(true)}>
               ⛏ Sign in with Minecraft</button>}
-        <p className="muted small" style={{ marginBottom: 0 }}>By signing in you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
+        <AccountTerms />
         <RecoveryNotice />
-        {legal && <LegalDialog onClose={() => setLegal(null)} onAgree={() => { const go = legal; setLegal(null); go(); }} />}
-        {jaceOs && (
-          <Modal onClose={() => setJaceOs(null)}>
-            <div className="modal-body" style={{ textAlign: "center" }}>
-              <Avatar p={{ name: jaceOs.name, avatar_url: jaceOs.picture }} size={72} />
-              <h2 style={{ margin: "8px 0 0" }}>Sign in as {jaceOs.name}?</h2>
-              <p className="muted" style={{ margin: 0 }}>@{jaceOs.username} - the Jace account this computer is signed in to</p>
-              {jaceOsError && <p className="error">{jaceOsError}</p>}
-              <p className="muted small" style={{ marginBottom: 0 }}>By signing in you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
-            </div>
-            <div className="modal-foot">
-              <button className="btn" onClick={() => setJaceOs(null)}>Not now</button>
-              <button className="btn primary" autoFocus disabled={jaceOsBusy} onClick={() => agreeThen(() => void signInJaceOs())}>
-                {jaceOsBusy ? "Signing in…" : `Sign in as @${jaceOs.username}`}</button>
-            </div>
-          </Modal>
-        )}
       </div>
     </div>
   );

@@ -1,7 +1,4 @@
-// jace-social.vercel.app/terms: the Jace Social Terms of Service (public/legal/jace-social-terms.md).
-import type { Metadata } from "next";
-import { LegalDocPage } from "@/lib/legalPage";
+// jace-social.vercel.app/terms: now part of the Terms and privacy page (/legal).
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Terms · Jace Social", description: "The rules for using Jace Social." };
-
-export default function Terms() { return <LegalDocPage id="jace-social-terms" />; }
+export default function Terms() { redirect("/legal#terms"); }

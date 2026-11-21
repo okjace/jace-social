@@ -4,12 +4,12 @@
 import { useState } from "react";
 import { rememberAccount, switchAccount } from "@/lib/accounts";
 import { api, desktopReady, inDesktop, type Me } from "@/lib/client";
-import { hasAgreed, LegalDialog } from "./Legal";
+import { AccountTerms } from "./Legal";
 import { MinecraftDevice } from "./MinecraftDevice";
 import { Modal } from "./ui";
 
 export function AddAccountModal({ me, onClose }: { me: Me; onClose: () => void }) {
-  const [step, setStep] = useState<"pick" | "minecraft" | "legal">(hasAgreed() ? "pick" : "legal");
+  const [step, setStep] = useState<"pick" | "minecraft">("pick");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
 
@@ -50,7 +50,6 @@ export function AddAccountModal({ me, onClose }: { me: Me; onClose: () => void }
     if (r.token) await done(r.token); else { setNote(""); setError(r.error ?? "Sign-in failed"); }
   }
 
-  if (step === "legal") return <LegalDialog onClose={onClose} onAgree={() => setStep("pick")} />;
   return (
     <Modal onClose={onClose}>
       {step === "minecraft" ? (
@@ -66,6 +65,7 @@ export function AddAccountModal({ me, onClose }: { me: Me; onClose: () => void }
           <button className="btn" onClick={withMinecraft}>⛏ Sign in with Minecraft</button>
           {note && <p className="muted small" style={{ margin: 0 }}>{note}</p>}
           {error && <p className="error" style={{ margin: 0 }}>{error}</p>}
+          <AccountTerms />
         </div>
         <div className="modal-foot"><button className="btn" onClick={onClose}>Cancel</button></div>
       </>}

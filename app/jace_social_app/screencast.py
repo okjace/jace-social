@@ -35,8 +35,19 @@ def needed() -> bool:
 
 
 def _host_env() -> dict:
-    from jace_social_app.jaceos import _host_env as env
-    return env()
+    """The environment for a program of the computer's own (gst-launch-1.0): without what PyInstaller and
+    the AppImage put in ours (their libraries would break the system's)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI", "_MEI"))}
+    for name in ("LD_LIBRARY_PATH", "LD_PRELOAD"):
+        orig = env.pop(f"{name}_ORIG", None)
+        if orig is not None:
+            env[name] = orig
+        elif getattr(sys, "frozen", False):
+            env.pop(name, None)
+    for name in ("PYTHONHOME", "PYTHONPATH", "QT_PLUGIN_PATH", "QML2_IMPORT_PATH", "GST_PLUGIN_PATH",
+                 "GST_PLUGIN_SYSTEM_PATH", "GST_PLUGIN_SCANNER"):
+        env.pop(name, None)
+    return env
 
 
 def missing() -> str | None:

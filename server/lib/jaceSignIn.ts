@@ -1,7 +1,6 @@
 // Signing in with a Jace account: their Jace Social account (made the first time), the Jace token kept
 // for message sync (only one with the "messages" scope), their Jace ban / mute carried over, then a
-// session. Used by the browser sign-in (auth/jace/callback) and Jace OS (auth/jace/os: the computer's
-// Jace account, through jace-account's token exchange).
+// session. Used by the browser sign-in (auth/jace/callback: Jace's normal sign-in, with its permission screen).
 import { createSession, db, newPlayerId, supabaseUrl, token, type Profile } from "./server";
 import type { JaceUser } from "./jace";
 import { saveConnection } from "./jaceSync";

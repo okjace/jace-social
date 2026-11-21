@@ -1,5 +1,8 @@
 # Jace Social desktop app changelog
 
+## 1.0.22
+- **No more "Sign in as @you?" on Jace OS.** Jace turned off the way it worked (signing in to Jace apps with the computer's Jace account without asking). Sign in with **Sign in with Jace** instead: Jace now always asks whether to let Jace Social use your Jace account. The setting for it in Settings → Desktop app is gone too.
+
 ## 1.0.21
 - **Screen sharing works on Linux with Wayland** (Jace OS, GNOME, KDE, Hyprland, niri, Sway...). The browser engine inside the app can't capture the screen on Wayland, so the app now does it itself, like browsers do: your desktop asks which screen or window to share, and the call shows it (up to 1920×1200, 15 frames a second). Stop sharing from the call, or from your desktop. It needs GStreamer's PipeWire plugin (`gst-plugin-pipewire`, or `gstreamer1.0-pipewire` on Debian and Ubuntu); if it's missing, the app says so.
 

@@ -18,7 +18,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSystemTrayIcon, QVBoxLayout, QWidget)
 
-from jace_social_app import APP_ID, APP_NAME, APP_VERSION, DATA_DIR, URL_SCHEME, desktop, desktopkeys, hotkeys, jaceos, macinstall, minecraft, screencast, updater, wininstall
+from jace_social_app import APP_ID, APP_NAME, APP_VERSION, DATA_DIR, URL_SCHEME, desktop, desktopkeys, hotkeys, macinstall, minecraft, screencast, updater, wininstall
 from jace_social_app.installer import SetupWizard, confirm_uninstall, run_windows_update, update_app
 
 BASE = os.environ.get("JACE_SOCIAL_URL", "https://jace-social.vercel.app").rstrip("/")
@@ -42,9 +42,6 @@ BRIDGE_JS = """
     window.jaceDesktop = {
       version: b.version,
       signInMinecraft: function () { return call("signInMinecraft"); },
-      signInJaceOS: function () { return call("signInJaceOS"); },
-      jaceOsAccount: function () { return call("jaceOsAccount"); },
-      setJaceOsSignIn: function (on) { b.setJaceOsSignIn(!!on); },
       linkMinecraft: function (token) { return call("linkMinecraft", token); },
       notify: function (title, body) { b.notify(String(title), String(body)); },
       setUnread: function (n) { b.setUnread(Number(n) || 0); },
@@ -280,37 +277,6 @@ class Bridge(QObject):
     def signInMinecraft(self, rid: int):
         self._microsoft(rid, lambda acc: minecraft.sign_in(BASE, acc))
 
-    def _off_thread(self, rid: int, work):
-        """Run work() off the UI thread and reply with what it returns ({} if it broke)."""
-        def run():
-            try:
-                out = work()
-            except Exception:  # noqa: BLE001 - always answer the page (and never log a token)
-                out = {"error": "Something went wrong signing in with this computer's Jace account"}
-            self.reply.emit(rid, json.dumps(out))
-        threading.Thread(target=run, daemon=True).start()
-
-    @Slot(int)
-    def jaceOsAccount(self, rid: int):
-        """Jace OS: the computer's Jace account for the sign-in page's "Sign in as @you?" -> {username, name,
-        picture}, or {} (not Jace OS, signed out there, or turned off in Settings -> Desktop app)."""
-        if not pref("jace_os_signin", True) or not jaceos.available():
-            self.reply.emit(rid, "{}")
-            return
-        self._off_thread(rid, jaceos.account)
-
-    @Slot(int)
-    def signInJaceOS(self, rid: int):
-        """Jace OS: sign in with the computer's Jace account (jaceos.py) -> {token, ...} or {error}."""
-        if not jaceos.available():
-            self.reply.emit(rid, json.dumps({"error": "This isn't Jace OS"}))
-            return
-        self._off_thread(rid, lambda: jaceos.sign_in(BASE))
-
-    @Slot(bool)
-    def setJaceOsSignIn(self, on: bool):
-        set_pref("jace_os_signin", bool(on))
-
     @Slot(int, str)
     def linkMinecraft(self, rid: int, token: str):
         self._microsoft(rid, lambda acc: minecraft.link(BASE, acc, token))
@@ -339,8 +305,6 @@ class Bridge(QObject):
             # Wayland: the desktop owns the keys (its dialog picks them, its settings change them)
             "overlayManagedByDesktop": hotkeys.on_wayland() and not desktopkeys.kind(),
             "shortcutsUnsupported": hotkeys.unsupported_reason(),
-            # Jace OS: offer to sign in with the computer's Jace account (null: not Jace OS)
-            "jaceOsSignIn": pref("jace_os_signin", True) is not False if jaceos.available() else None,
         }))
 
     @Slot(int, bool)

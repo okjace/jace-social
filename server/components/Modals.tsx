@@ -644,7 +644,7 @@ function DesktopVersion() {
 /** Desktop app: open on sign-in, and the shortcut for the game overlay. */
 function DesktopOptions({ d }: { d: DesktopBridge }) {
   const [s, setS] = useState<{ startup: boolean | null; overlayShortcut: string; overlayError: string | null; shortcutsUnsupported: string | null;
-    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean; jaceOsSignIn?: boolean | null } | null>(null);
+    overlayBoundAs?: string | null; overlayManagedByDesktop?: boolean } | null>(null);
   const [recording, setRecording] = useState(false);
   const [msg, setMsg] = useState("");
   const load = () => void d.getDesktopSettings!().then(setS);
@@ -679,12 +679,6 @@ function DesktopOptions({ d }: { d: DesktopBridge }) {
           onChange={async (e) => { const r = await d.setStartup!(e.target.checked); if (r.error) setMsg(r.error); load(); }} />
         Open Jace Social when I sign in to my computer
       </label>
-      {s.jaceOsSignIn !== null && s.jaceOsSignIn !== undefined && d.setJaceOsSignIn && (
-        <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input type="checkbox" checked={s.jaceOsSignIn} onChange={(e) => { d.setJaceOsSignIn!(e.target.checked); setS({ ...s, jaceOsSignIn: e.target.checked }); }} />
-          On the sign-in screen, offer to sign in with this computer&apos;s Jace account (Jace OS)
-        </label>
-      )}
       <span>Game overlay shortcut</span>
       {s.shortcutsUnsupported ? <span>{s.shortcutsUnsupported}</span> : s.overlayManagedByDesktop ? (
         // Wayland: the desktop asks to allow the shortcut, and its settings choose the keys

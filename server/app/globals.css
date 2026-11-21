@@ -503,16 +503,9 @@ select.btn { width: auto; }
 .doc-link:hover { border-color: var(--green); }
 
 /* Terms and privacy popup (components/Legal.tsx) */
-.modal:has(> .legal) { display: flex; flex-direction: column; overflow: hidden; }
-.legal { display: flex; flex-direction: column; min-height: 0; max-height: 90vh; text-align: left; }
-.legal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 8px; }
-.legal-tabs { display: flex; gap: 6px; padding: 0 20px 10px; overflow-x: auto; border-bottom: 1px solid var(--line); flex: none; }
-.legal-tabs .tab { white-space: nowrap; }
-.legal-body { overflow-y: auto; padding: 4px 20px 16px; line-height: 1.55; min-height: 120px; }
-.legal .modal-foot { align-items: center; flex-wrap: wrap; flex: none; }
 .legal-page h1 { margin-top: 0; }
-.legal-body, .legal-page, .jace-pane .card { white-space: pre-wrap; overflow-wrap: anywhere; }
-.legal-body .md-h, .legal-page .md-h { margin: 14px 0 0; }
+.legal-page, .jace-pane .card { white-space: pre-wrap; overflow-wrap: anywhere; }
+.legal-page .md-h { margin: 14px 0 0; }
 .btn.danger.solid-danger { background: var(--red); border-color: var(--red); color: #fff; }   /* "Delete my account now" */
 
 /* Jace ban appeals (components/Appeals.tsx) */
@@ -636,3 +629,25 @@ select.btn { width: auto; }
 .forum-tags-edit { display: grid; gap: 6px; }
 .forum-tag-row { display: flex; gap: 6px; align-items: center; }
 .forum-tag-row .tag-emoji { width: 52px; text-align: center; }
+
+/* Terms and privacy (components/Legal.tsx, lib/legalPage.tsx) */
+.terms-notice {
+  position: fixed; right: 16px; bottom: 16px; z-index: 1000; max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 14px; border-radius: 12px; background: var(--float); border: 1px solid var(--line2);
+  color: var(--muted); font-size: 13px; line-height: 1.4; text-decoration: none; box-shadow: 0 8px 24px var(--shadow);
+  animation: terms-notice 5s ease forwards;
+}
+.terms-notice:hover { color: var(--text); border-color: var(--green); }
+.terms-notice u { color: var(--green); text-decoration: none; }
+@keyframes terms-notice { 0% { opacity: 0; transform: translateY(8px); } 6%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .terms-notice { animation: none; } }
+.legal-hub .wrap { max-width: 780px; padding: 32px 16px 48px; line-height: 1.6; }
+.legal-hub h1 { margin: 8px 0 4px; }
+.legal-nav { position: sticky; top: 0; z-index: 1; display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 0; margin-bottom: 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.legal-nav a { padding: 6px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line2); color: var(--text); text-decoration: none; font-size: 14px; }
+.legal-nav a:hover { border-color: var(--green); color: var(--green); }
+.legal-section { scroll-margin-top: 64px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.legal-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.legal-card { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line2); color: var(--text); text-decoration: none; }
+.legal-card span { color: var(--muted); font-size: 13px; }
+.legal-card:hover { border-color: var(--green); }

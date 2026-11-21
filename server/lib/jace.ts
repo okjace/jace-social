@@ -55,29 +55,6 @@ export async function jaceUserFromToken(accessToken: string, scope: string): Pro
            token: accessToken, scope };
 }
 
-/**
- * Jace's token introspection (RFC 7662), as Jace Social: is this access token valid, and was it
- * issued to Jace Social (not to another app)? -> {sub, scope}, or null for anything else (expired,
- * another app's, a banned account's, or Jace couldn't be asked). The token is never logged.
- */
-export async function introspectJace(accessToken: string): Promise<{ sub: string; scope: string } | null> {
-  const id = process.env.JACE_OAUTH_CLIENT_ID, secret = process.env.JACE_OAUTH_CLIENT_SECRET;
-  if (!id || !secret) return null;
-  try {
-    const r = await fetch(`${JACE}/api/oauth/introspect`, {
-      method: "POST", cache: "no-store", signal: AbortSignal.timeout(10_000),
-      headers: { "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}` },
-      body: JSON.stringify({ token: accessToken }),
-    });
-    const d = await r.json().catch(() => ({})) as { active?: boolean; client_id?: string; sub?: string; scope?: string; exp?: number };
-    if (!r.ok || d.active !== true || d.client_id !== id || !d.sub) return null;
-    if (typeof d.exp === "number" && d.exp * 1000 <= Date.now()) return null;
-    return { sub: String(d.sub), scope: String(d.scope ?? "") };
-  } catch {
-    return null;
-  }
-}
-
 export type JaceModeration = {
   user_id: string; username: string; banned: boolean; ban_reason: string | null; banned_at: string | null; ban_until?: string | null;
   muted: boolean; mute_reason?: string | null; mute_until?: string | null;        // (mute details: Jace from 2026-10-28)
