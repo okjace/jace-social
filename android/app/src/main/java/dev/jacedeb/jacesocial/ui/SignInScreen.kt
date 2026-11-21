@@ -6,6 +6,7 @@ import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,6 +101,12 @@ fun SignInScreen(session: Session) {
                     OutlinedButton(onClick = { signInWithMinecraft() }, Modifier.fillMaxWidth()) { Text("⛏  Sign in with Minecraft") }
                 }
                 error?.let { Text(it, color = JaceColors.red, textAlign = TextAlign.Center) }
+                Text("By making an account, you agree to the Terms of Service and Privacy Policy.",
+                    color = JaceColors.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { openInBrowser(context, "https://jace-social.vercel.app/legal#terms") }) { Text("Terms of Service", color = JaceColors.green, fontSize = 13.sp) }
+                    TextButton(onClick = { openInBrowser(context, "https://jace-social.vercel.app/legal#privacy") }) { Text("Privacy Policy", color = JaceColors.green, fontSize = 13.sp) }
+                }
             }
         }
     }

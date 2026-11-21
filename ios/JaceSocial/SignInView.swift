@@ -30,6 +30,9 @@ struct SignInView: View {
                         .buttonStyle(.bordered).controlSize(.large)
                 }
                 if let e = error { Text(e).foregroundStyle(JaceColor.red).multilineTextAlignment(.center) }
+                // (the links open the Terms and privacy page in the browser)
+                Text("By making an account, you agree to the [Terms of Service](https://jace-social.vercel.app/legal#terms) and [Privacy Policy](https://jace-social.vercel.app/legal#privacy).")
+                    .font(.footnote).foregroundStyle(JaceColor.muted).tint(JaceColor.green).multilineTextAlignment(.center)
             }
             .padding(28)
             .background(JaceColor.panel, in: RoundedRectangle(cornerRadius: 18))

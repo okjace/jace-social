@@ -1,5 +1,8 @@
 # Jace Social phone app changelog
 
+## 2.0.4
+- The sign-in screen says "By making an account, you agree to the Terms of Service and Privacy Policy", with links to Jace Social's Terms and privacy page (it also links to Jace's).
+
 ## 2.0.3
 - iPhone: the apps now install on jailbroken iPhones with AppSync (before: "missing application-identifier entitlement"), and stay signed in there. Sideloadly and AltStore / SideStore work as before.
 

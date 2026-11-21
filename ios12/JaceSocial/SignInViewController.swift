@@ -9,6 +9,7 @@ final class SignInViewController: UIViewController {
     private let jace = UIButton(type: .system)
     private let minecraft = UIButton(type: .system)
     private let openLink = UIButton(type: .system)
+    private let terms = UIButton(type: .system)
     private var polling: Timer?
     private var browser: SFSafariViewController?
     private var device: DeviceCode?
@@ -45,7 +46,19 @@ final class SignInViewController: UIViewController {
         status.numberOfLines = 0
         status.textAlignment = .center
         spinner.hidesWhenStopped = true
-        let stack = UIStackView(arrangedSubviews: [title, tagline, code, openLink, spinner, status, jace, minecraft])
+        // "By making an account, you agree to ..." - opens the Terms and privacy page
+        let termsText = NSMutableAttributedString(string: "By making an account, you agree to the ",
+                                                  attributes: [.foregroundColor: Theme.muted, .font: UIFont.systemFont(ofSize: 13)])
+        let link: [NSAttributedString.Key: Any] = [.foregroundColor: Theme.green, .font: UIFont.systemFont(ofSize: 13)]
+        termsText.append(NSAttributedString(string: "Terms of Service", attributes: link))
+        termsText.append(NSAttributedString(string: " and ", attributes: [.foregroundColor: Theme.muted, .font: UIFont.systemFont(ofSize: 13)]))
+        termsText.append(NSAttributedString(string: "Privacy Policy", attributes: link))
+        termsText.append(NSAttributedString(string: ".", attributes: [.foregroundColor: Theme.muted, .font: UIFont.systemFont(ofSize: 13)]))
+        terms.setAttributedTitle(termsText, for: .normal)
+        terms.titleLabel?.numberOfLines = 0
+        terms.titleLabel?.textAlignment = .center
+        terms.addTarget(self, action: #selector(openTerms), for: .touchUpInside)
+        let stack = UIStackView(arrangedSubviews: [title, tagline, code, openLink, spinner, status, jace, minecraft, terms])
         stack.axis = .vertical
         stack.spacing = 14
         stack.alignment = .fill
@@ -59,6 +72,11 @@ final class SignInViewController: UIViewController {
             stack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             stack.widthAnchor.constraint(equalToConstant: 340).withPriority(.defaultHigh),
         ])
+    }
+
+    @objc private func openTerms() {
+        guard let url = URL(string: "https://jace-social.vercel.app/legal") else { return }
+        present(SFSafariViewController(url: url), animated: true)
     }
 
     private func busy(_ text: String?) {
